@@ -6,6 +6,7 @@ import { extname, join } from 'node:path';
 import type { Plugin } from 'vite';
 import { generateImage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { isPlatformManaged } from '../keystore.ts';
 
 import { uploadDir } from '../media-dir.ts';
 import { fetchGeneratedResult } from './result-download.ts';
@@ -368,6 +369,9 @@ export function imageGenerationPlugin(options: ImagePluginOptions): Plugin {
             background, moderation, inputFidelity, outputFormat, outputCompression,
             seed, promptOptimizer,
           } = input;
+          if (isPlatformManaged() && model !== 'gpt-image-2') {
+            throw new Error('平台模式生图统一使用喵喵 API（OpenAI Images 兼容接口）');
+          }
           const [width, height] = input.width != null && input.height != null
             ? [input.width, input.height]
             : dimensions(aspectRatio!, imageSize);

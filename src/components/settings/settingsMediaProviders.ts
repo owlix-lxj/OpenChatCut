@@ -99,6 +99,7 @@ export const VOICE_SETTINGS_GROUP: SettingsGroup = {
     { value: 'gemini', label: 'Google Gemini' },
     { value: 'mistral', label: 'Mistral Voxtral' },
     { value: 'cartesia', label: 'Cartesia' },
+    { value: 'qwen', label: '阿里云百炼 Qwen' },
   ]),
   vendors: [
     {
@@ -177,6 +178,15 @@ export const VOICE_SETTINGS_GROUP: SettingsGroup = {
         modelText('CARTESIA_TTS_MODEL', '配音模型', 'sonic-3'),
       ],
     },
+    {
+      key: 'voice/qwen', vendor: 'qwen', title: '阿里云百炼 Qwen-Audio',
+      note: '使用同一个 LLM_QWEN_API_KEY。推荐 qwen-audio-3.0-tts-plus（高质量）或 qwen-audio-3.0-tts-flash（更低延迟）。系统音色：plus 可用 longanlingxin / longanlufeng；flash 可用 longanfengyue、longanlingxi、longanxiaoxin 等。',
+      fields: [
+        secret('LLM_QWEN_API_KEY', '百炼 API Key'),
+        text('QWEN_AUDIO_BASE_URL', '音频 Base URL', '默认 https://dashscope.aliyuncs.com'),
+        modelSelect('QWEN_TTS_MODEL', '配音模型', 'qwen-audio-3.0-tts-plus', ['qwen-audio-3.0-tts-plus', 'qwen-audio-3.0-tts-flash']),
+      ],
+    },
   ],
 };
 
@@ -193,6 +203,7 @@ export const TRANSCRIPTION_SETTINGS_GROUP: SettingsGroup = {
     { value: 'groq', label: 'Groq（云端）' },
     { value: 'elevenlabs', label: 'ElevenLabs Scribe（云端）' },
     { value: 'cartesia', label: 'Cartesia（云端）' },
+    { value: 'qwen', label: '阿里云百炼 Qwen-Audio（云端）' },
   ], 'AssemblyAI（默认）'),
   vendors: [
     transcriptionPage('assemblyai', 'assemblyai', 'AssemblyAI', [secret('ASSEMBLYAI_API_KEY', 'API Key')]),
@@ -224,11 +235,16 @@ export const TRANSCRIPTION_SETTINGS_GROUP: SettingsGroup = {
       secret('CARTESIA_API_KEY', 'API Key'),
       modelText('CARTESIA_TRANSCRIPTION_MODEL', '转写模型', 'ink-whisper'),
     ]),
+    transcriptionPage('qwen', 'qwen', '阿里云百炼 Qwen-Audio', [
+      secret('LLM_QWEN_API_KEY', '百炼 API Key'),
+      text('QWEN_AUDIO_BASE_URL', '音频 Base URL', '默认 https://dashscope.aliyuncs.com'),
+      modelSelect('QWEN_ASR_MODEL', '转写模型', 'qwen-audio-3.0-asr-flash', ['qwen-audio-3.0-asr-flash']),
+    ], '支持 Base64 音频和词级时间戳，适合音视频字幕与口播剪辑；当前同步接口单次音频上限以百炼接口返回为准，长音频说话人分离需使用 Filetrans 公网 URL 任务。'),
   ],
 };
 
 export const ROUTE_NEEDS: Record<string, readonly (readonly string[])[]> = {
-  'gpt-image-2': [['IMAGE_API_KEY'], ['OPENAI_API_KEY']],
+  'gpt-image-2': [['IMAGE_API_KEY'], ['OPENAI_API_KEY'], ['LLM_OPENAI_API_KEY']],
   'nano-banana': [['GEMINI_API_KEY']],
   'image-01': [['MINIMAX_API_KEY']],
   'grok-imagine': [['LLM_XAI_OAUTH_API_KEY'], ['LLM_XAI_API_KEY']],
@@ -241,11 +257,13 @@ export const ROUTE_NEEDS: Record<string, readonly (readonly string[])[]> = {
   gemini: [['GEMINI_API_KEY']],
   mistral: [['LLM_MISTRAL_API_KEY']],
   cartesia: [['CARTESIA_API_KEY']],
+  qwen: [['LLM_QWEN_API_KEY']],
   assemblyai: [['ASSEMBLYAI_API_KEY']],
   local: [[]],
   deepgram: [['DEEPGRAM_API_KEY']],
   groq: [['GROQ_API_KEY']],
   seedance2: [['SEEDANCE_API_KEY']],
+  'jimeng-avatar': [['JIMENG_ACCESS_KEY', 'JIMENG_SECRET_KEY']],
   kling: [['KLING_API_KEY']],
   hailuo: [['MINIMAX_API_KEY']],
   mureka: [['MUREKA_API_KEY']],

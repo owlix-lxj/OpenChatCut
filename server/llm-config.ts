@@ -6,6 +6,12 @@ import {
   providerApiPath,
   type LlmProvider,
 } from '../shared/llm-providers.ts';
+import {
+  isPlatformLlmProvider,
+  isPlatformManagedValue,
+  PLATFORM_DEFAULT_LLM_CONFIG,
+  PLATFORM_MODE_ENV,
+} from '../shared/platform-config.ts';
 
 export type ServerLlmProvider = LlmProvider;
 export const normalizeServerLlmProvider = normalizeLlmProvider;
@@ -54,11 +60,14 @@ export function resolveLlmProviderConfig(
 ): ResolvedLlmProviderConfig {
   const provider = normalizeServerLlmProvider(providerValue);
   const names = llmProviderConfigNames(provider);
+  const platformConfig = isPlatformLlmProvider(provider) && isPlatformManagedValue(get(PLATFORM_MODE_ENV))
+    ? PLATFORM_DEFAULT_LLM_CONFIG[provider]
+    : undefined;
   return {
     provider,
     apiKey: get(names.apiKey),
-    baseUrl: resolveLlmBaseUrl(provider, get(names.baseUrl), AI_SDK_BASE_URL_FORMAT),
-    model: get(names.model) || defaultModelForProvider(provider),
+    baseUrl: resolveLlmBaseUrl(provider, get(names.baseUrl) || platformConfig?.baseUrl, AI_SDK_BASE_URL_FORMAT),
+    model: get(names.model) || platformConfig?.model || defaultModelForProvider(provider),
   };
 }
 

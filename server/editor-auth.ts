@@ -5,6 +5,7 @@ import type { EditorBootstrapInfo } from '../shared/editor-auth-transport.ts';
 import { isLoopbackAddress } from './loopback-address.ts';
 import { loadOrCreateMcpToken } from './mcp-token.ts';
 import { runtimeProfile } from './runtime-profile.ts';
+import { platformManaged, platformSession } from './platform-session.ts';
 
 export const EDITOR_BOOTSTRAP_HEADER = 'x-openchatcut-editor-bootstrap';
 
@@ -44,6 +45,9 @@ function secretMatches(actual: string | undefined, expected: string): boolean {
 }
 
 export function externalMcpAuthorized(req: IncomingMessage): boolean {
+  // The global MCP token has no tenant/user identity and must never authorize
+  // a request in the hosted multi-tenant editor.
+  if (platformManaged()) return false;
   return secretMatches(req.headers.authorization, `Bearer ${externalMcpToken()}`);
 }
 
@@ -99,6 +103,14 @@ export function trustedEditorRequest(req: IncomingMessage, requireOrigin: boolea
  *  authorized purely by the loopback + Origin request shape: any page served
  *  from the local editor may call them. No credential handshake is needed. */
 export function editorCredentialAuthorized(req: IncomingMessage, requireOrigin: boolean): boolean {
+  if (platformManaged()) {
+    if (!platformSession(req)) return false;
+    if (!requireOrigin) return true;
+    const origin = headerValue(req, 'origin');
+    const host = headerValue(req, 'host');
+    if (!origin || !host) return false;
+    try { return new URL(origin).host.toLowerCase() === host.toLowerCase(); } catch { return false; }
+  }
   return trustedEditorRequest(req, requireOrigin);
 }
 

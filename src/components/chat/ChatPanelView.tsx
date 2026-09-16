@@ -1,6 +1,7 @@
+import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { theme } from '../../theme';
-import { BrandMark, Icon, OpenChatCutWordmark } from '../icons';
+import { BrandMark, Icon } from '../icons';
 import { AgentChangeLogMenu } from './AgentChangeLogMenu';
 import { AgentRunInspector } from './AgentRunInspector';
 import { ChatComposer } from './ChatComposer';
@@ -14,7 +15,6 @@ import { EMPTY_PROJECT_STARTERS, QUICK_ACTIONS } from './chatPanelPresets';
 import type { DisplayMessage } from '../../agent/agent-session';
 import { readStoredServerRun } from '../../agent/serverRunSessionStorage';
 import type { ChatPanelController } from './chatPanelController';
-import { CapabilityBanner } from './CapabilityGapBanner';
 
 const MESSAGE_WINDOW_SIZE = 40;
 
@@ -38,31 +38,58 @@ function CollapsedPanel({ controller }: { controller: ChatPanelController }) {
     <ChangeLogPortal controller={controller} />
     <aside className="cc-chat-panel collapsed" data-cc-shortcut-surface="agent-chat" tabIndex={-1}
       style={{ gridColumn: 1, gridRow: '2 / 5', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '10px 0', borderRight: `0.5px solid ${theme.border}`, background: theme.panel }}>
-      <button type="button" onClick={props.onToggleCollapse} title={t('展开 OpenChatCut Agent')}
+      <button type="button" onClick={props.onToggleCollapse} title={t('展开 AI-cut Agent')}
         style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: 14 }}>
         <span style={{ transform: 'rotate(-90deg)', display: 'inline-flex' }}><Icon name="chevronDown" size={14} /></span>
       </button>
-      <div className="cc-chat-collapsed-brand">OpenChatCut</div>
+      <div className="cc-chat-collapsed-brand">AI-cut</div>
     </aside>
   </>;
 }
 
 function ChatHeader({ controller }: { controller: ChatPanelController }) {
   const { props, t, agent } = controller;
+  const historyRef = useRef<HTMLDetailsElement>(null);
   return <div className="cc-chat-header">
     <div className="cc-chat-brand">
-      <BrandMark size={20} />
+      <BrandMark size={28} />
       <span className="cc-chat-brand-copy">
-        <OpenChatCutWordmark width={102} />
+        <strong className="cc-aicut-wordmark">AI-cut</strong>
         <small>{t('Agent 工作台')}</small>
       </span>
     </div>
     <AgentRunInspector projectId={props.projectId} />
+    <button type="button" onClick={agent.newConversation} disabled={agent.running || !agent.hydrated}
+      title={t('新建对话')} aria-label={t('新建对话')} className="cc-chat-header-action">
+      <Icon name="plus" size={14} />
+    </button>
+    <details ref={historyRef} className="cc-chat-history">
+      <summary title={t('历史消息')} aria-label={t('历史消息')} className="cc-chat-header-action">
+        <Icon name="history" size={14} />
+      </summary>
+      <div className="cc-chat-history-menu">
+        <div className="cc-chat-history-title">{t('历史消息')}</div>
+        {agent.conversations.length === 0 ? (
+          <div className="cc-chat-history-empty">{t('暂无历史消息')}</div>
+        ) : agent.conversations.map((conversation) => (
+          <button type="button" key={conversation.id}
+            className={conversation.id === agent.activeConversationId ? 'active' : ''}
+            disabled={agent.running}
+            onClick={() => {
+              historyRef.current?.removeAttribute('open');
+              agent.switchConversation(conversation.id);
+            }}>
+            <span>{conversation.title}</span>
+            <small>{new Date(conversation.updatedAt).toLocaleString()} · {t('{n} 条消息', { n: conversation.messageCount })}</small>
+          </button>
+        ))}
+      </div>
+    </details>
     <button type="button" onClick={agent.clearHistory} disabled={agent.running} title={t('清空对话')}
-      style={{ background: 'none', border: 'none', color: theme.textDim, cursor: agent.running ? 'default' : 'pointer', opacity: agent.running ? 0.4 : 1, padding: 2, lineHeight: 0 }}>
+      aria-label={t('清空对话')} className="cc-chat-header-action">
       <Icon name="trash" size={14} />
     </button>
-    <button type="button" onClick={props.onToggleCollapse} title={t('收起 OpenChatCut Agent')}
+    <button type="button" onClick={props.onToggleCollapse} title={t('收起 AI-cut Agent')}
       style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: 13 }}>
       <span style={{ transform: 'rotate(90deg)', display: 'inline-flex' }}><Icon name="chevronDown" size={14} /></span>
     </button>
@@ -119,7 +146,7 @@ function lastUserTurn(messages: readonly DisplayMessage[]): number {
 }
 
 function MessageEntries({ controller }: { controller: ChatPanelController }) {
-  const { agent, composer, props, visibleMessages, visibleFrom } = controller;
+  const { agent, composer, visibleMessages, visibleFrom } = controller;
   // Retry re-runs the turn instead of asking again after it: the failed attempt is rewound
   // out of both histories first, so an error or a half-finished tool call cannot steer the
   // second try. Only the latest turn offers it — rewinding an earlier one would discard
@@ -135,10 +162,9 @@ function MessageEntries({ controller }: { controller: ChatPanelController }) {
   };
   return <>
     {groupMessages(visibleMessages, visibleFrom).map((item) => item.kind === 'toolgroup' ? (
-      <ToolGroupRow key={item.index} name={item.name} items={item.items} onOpenSettings={props.onOpenSettings} />
+      <ToolGroupRow key={item.index} name={item.name} items={item.items} />
     ) : (
       <ChatMessage key={item.index} msg={item.msg} running={agent.running}
-        onOpenSettings={props.onOpenSettings}
         retry={item.msg.role === 'user' && item.index === lastUser ? item.msg.retry : undefined}
         streaming={agent.running && item.index === agent.messages.length - 1 && item.msg.role === 'assistant'}
         widgetSubmitted={agent.messages.slice(item.index + 1).some((message) => message.role === 'user')}
@@ -235,6 +261,7 @@ function ComposerInput({ controller }: { controller: ChatPanelController }) {
     pendingAttachmentCount={composer.pendingAttachmentCount}
     pasteError={composer.pasteError} onDismissPasteError={() => composer.setPasteError(null)}
     onDropEditorItem={actions.onDropEditorItem} taRef={composer.taRef}
+    onOpenDigitalHuman={props.onOpenDigitalHuman}
     placeholder={agent.messages.length === 0
       ? t('描述你想要创建的内容...') : t('告诉 AI 要做哪些修改 - @ 引用素材')} />;
 }
@@ -260,7 +287,6 @@ function ExpandedPanel({ controller }: { controller: ChatPanelController }) {
       }}
       style={{ gridColumn: 1, gridRow: '2 / 5', display: 'flex', flexDirection: 'column', borderRight: `0.5px solid ${theme.border}`, background: theme.panel, minHeight: 0, minWidth: 0 }}>
       <ChatHeader controller={controller} />
-      <CapabilityBanner controller={controller} />
       <MessageWorkspace controller={controller} />
       <ComposerSection controller={controller} />
     </aside>

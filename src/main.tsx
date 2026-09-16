@@ -6,12 +6,35 @@ import { TranscriptWindowRoot } from './media/TranscriptWindowRoot';
 import { loadProjectFonts } from './fonts/googleFonts';
 import { hydratePlugins } from './plugins/store';
 import { initSkins } from './skins';
-import { ensureLocaleDict, getLocale, prefetchLocaleDicts } from './i18n/locale';
+import { ensureLocaleDict, getLocale, prefetchLocaleDicts, t } from './i18n/locale';
+import { configurePlatformClientStorageScope } from './persist/sharedKvLocal';
 
 // Kick the active locale's dictionary off FIRST so its fetch overlaps the setup
 // below; the render waits on it so no frame renders untranslated copy. Only
 // this one language is fetched — the other three cost nothing until switched.
 const localeReady = ensureLocaleDict(getLocale());
+
+async function exchangePlatformTicket(): Promise<void> {
+  if (typeof __PLATFORM_MANAGED__ === 'undefined' || !__PLATFORM_MANAGED__) return;
+  const url = new URL(window.location.href);
+  const ticket = url.searchParams.get('platform_ticket');
+  let response: Response;
+  if (!ticket) {
+    response = await fetch('/api/platform/session', { cache: 'no-store' });
+    if (!response.ok) throw new Error(t('剪辑会话已过期，请从业务后台重新打开'));
+  } else {
+    url.searchParams.delete('platform_ticket');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    response = await fetch('/api/platform/session/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket }),
+    });
+    if (!response.ok) throw new Error(t('剪辑会话无效或已过期，请从业务后台重新打开'));
+  }
+  const identity = await response.json() as { tenantId?: string; userId?: string };
+  configurePlatformClientStorageScope(identity.tenantId ?? '', identity.userId ?? '');
+}
 
 // Inject skin variables and apply persistent skin before rendering to avoid flashing the default color in the first frame.
 initSkins();
@@ -21,19 +44,23 @@ loadProjectFonts();
 
 // The installed content plugin is registered in the runtime registry (visible to resource library/agent). Timeline rendering does not wait for it —
 // The applied content has been snapshotted into state, see docs/plugin-system-design.md.
-void hydratePlugins().catch(() => {});
 
 const root = document.getElementById('root');
 if (!root) throw new Error('no #root');
 const isTranscriptWindow = new URLSearchParams(window.location.search).has('transcript-window');
-void localeReady.then(() => {
+void Promise.all([localeReady, exchangePlatformTicket()]).then(() => {
+  void hydratePlugins().catch(() => {});
   createRoot(root).render(
     <StrictMode>
       {isTranscriptWindow ? <TranscriptWindowRoot /> : <App />}
     </StrictMode>,
   );
-  // Warm the other languages only once the first paint is out of the way, so
-  // the language switcher stays instant without competing for the boot.
+  // Keep the additional dictionaries warm for compatibility with imported
+  // projects and internal locale consumers without adding a visible language
+  // switcher to the product UI.
   if (typeof requestIdleCallback === 'function') requestIdleCallback(prefetchLocaleDicts);
   else setTimeout(prefetchLocaleDicts, 2_000);
+}).catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  root.textContent = message;
 });

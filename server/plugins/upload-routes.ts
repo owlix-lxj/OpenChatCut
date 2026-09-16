@@ -4,7 +4,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
-  presignGetUpload, presignPutUpload, r2Config, r2PresignEnabled, UploadTooLargeError,
+  presignGetUpload, presignPutUpload, r2Config, r2PresignEnabled, uploadObjectKey, UploadTooLargeError,
 } from '../r2.ts';
 import {
   isSafeUploadName, resolveOrHydrateUploadFile, serveDiskFile, syncLegacyUploads,
@@ -203,7 +203,7 @@ async function handlePresignPost(req: IncomingMessage, res: ServerResponse): Pro
   }
   sendJson(res, 200, {
     mode: 'proxy', enabled: false, uploadUrl: proxyUrl,
-    path: `/media/uploads/${slot.name}`, fileKey: `uploads/${slot.name}`,
+    path: `/media/uploads/${slot.name}`, fileKey: uploadObjectKey(slot.name),
     contentType: slot.contentType, name: slot.name, expiresIn: 0,
   });
 }

@@ -12,6 +12,8 @@ const MINIMAX_RATES = new Set([8_000, 16_000, 22_050, 24_000, 32_000, 44_100]);
 const MINIMAX_BITRATES = new Set([32_000, 64_000, 128_000, 256_000]);
 const MINIMAX_FORMATS = new Set(['mp3', 'pcm', 'flac', 'wav', 'pcmu_raw', 'pcmu_wav', 'opus']);
 const MINIMAX_LANGUAGES = new Set<string>(MINIMAX_LANGUAGE_BOOSTS);
+const QWEN_OUTPUTS = new Set(['mp3', 'pcm', 'wav', 'opus']);
+const QWEN_RATES = new Set([8_000, 16_000, 22_050, 24_000, 44_100, 48_000]);
 
 function range(value: number | undefined, min: number, max: number, name: string): void {
   if (value != null && (!Number.isFinite(value) || value < min || value > max)) throw new Error(`${name} must be between ${min} and ${max}`);
@@ -103,6 +105,26 @@ function validateMinimalProvider(input: VoiceRequest, label: string): void {
     input.subtitleEnable, input.subtitleType],
   `${label} only accepts text, voiceId, and modelId`);
 }
+
+function validateQwen(input: VoiceRequest): void {
+  range(input.speed, 0.5, 2, 'speed');
+  if (input.outputFormat != null && !QWEN_OUTPUTS.has(input.outputFormat.toLowerCase())) {
+    throw new Error('unsupported Qwen outputFormat (use mp3, pcm, wav, or opus)');
+  }
+  if (input.sampleRate != null && !QWEN_RATES.has(input.sampleRate)) throw new Error('unsupported Qwen sampleRate');
+  if (input.languageCode != null && !/^(?:auto|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$/.test(input.languageCode)) {
+    throw new Error('languageCode must be an ISO language code or auto');
+  }
+  reject([input.stability, input.similarityBoost, input.style, input.useSpeakerBoost, input.seed,
+    input.optimizeStreamingLatency, input.enableLogging, input.applyTextNormalization, input.applyLanguageTextNormalization,
+    input.pronunciationDictionaryLocators, input.previousText, input.nextText, input.previousRequestIds, input.nextRequestIds,
+    input.speedRatio, input.emotion, input.emotionScale, input.loudnessRatio, input.pitch, input.volume,
+    input.performancePrompt, input.explicitDialect, input.bitrate, input.audioFormat, input.channel,
+    input.forceCbr, input.stream, input.excludeAggregatedAudio, input.languageBoost, input.textNormalization,
+    input.latexRead, input.pronunciations, input.timbreWeights, input.voiceModify, input.subtitleEnable, input.subtitleType],
+  'Qwen only accepts text, voiceId, modelId, speed, languageCode, outputFormat, and instructions');
+}
+
 function isAiProvider(provider: string | undefined): provider is 'openai' | 'gemini' | 'mistral' | 'cartesia' {
   return provider === 'openai' || provider === 'gemini' || provider === 'mistral' || provider === 'cartesia';
 }
@@ -132,7 +154,7 @@ function validateAiProvider(input: VoiceRequest, provider: 'openai' | 'gemini' |
 export function validateVoiceRequest(input: VoiceRequest): ValidVoiceRequest {
   const provider = input.provider;
   if (provider !== 'elevenlabs' && provider !== 'doubao' && provider !== 'minimax'
-    && provider !== 'inworld' && provider !== 'fishaudio' && provider !== 'speechify' && !isAiProvider(provider)) {
+    && provider !== 'inworld' && provider !== 'fishaudio' && provider !== 'speechify' && provider !== 'qwen' && !isAiProvider(provider)) {
     throw new Error('unsupported voice provider');
   }
   const text = String(input.text ?? '').trim();
@@ -143,6 +165,7 @@ export function validateVoiceRequest(input: VoiceRequest): ValidVoiceRequest {
   if (provider === 'elevenlabs') validateEleven(input);
   else if (provider === 'doubao') validateDoubao(input, voiceId);
   else if (provider === 'minimax') validateMinimax(input, text);
+  else if (provider === 'qwen') validateQwen(input);
   else if (isAiProvider(provider)) validateAiProvider(input, provider);
   else {
     if (provider === 'inworld' && text.length > 2_000) throw new Error('Inworld TTS text must be at most 2000 characters');
@@ -151,6 +174,10 @@ export function validateVoiceRequest(input: VoiceRequest): ValidVoiceRequest {
   if (isAiProvider(provider)) {
     return { ...input, provider, text, voiceId, outputFormat: input.outputFormat ?? (provider === 'gemini' ? 'wav' : 'mp3'),
       sampleRate: 24_000, audioFormat: 'mp3', channel: 1 };
+  }
+  if (provider === 'qwen') {
+    return { ...input, provider, text, voiceId, outputFormat: input.outputFormat ?? 'mp3',
+      sampleRate: input.sampleRate ?? 24_000, audioFormat: 'mp3', channel: 1 };
   }
   return { ...input, provider, text, voiceId, outputFormat: input.outputFormat ?? 'mp3_44100_128',
     sampleRate: input.sampleRate ?? 32_000,

@@ -1,6 +1,6 @@
 import type { MediaAsset } from '../editor/types';
 
-export type ProjectDocumentKind = 'text' | 'docx' | 'pdf';
+export type ProjectDocumentKind = 'text' | 'docx' | 'pdf' | 'pptx';
 
 const TEXT_EXTENSIONS = new Set([
   '.csv', '.css', '.html', '.js', '.json', '.jsonl', '.jsx', '.md', '.markdown',
@@ -23,6 +23,7 @@ export function projectDocumentKind(file: Pick<File, 'name' | 'type'>): ProjectD
   const extension = extensionOf(file.name);
   if (extension === '.docx') return 'docx';
   if (extension === '.pdf') return 'pdf';
+  if (extension === '.pptx') return 'pptx';
   if (TEXT_EXTENSIONS.has(extension) || file.type.startsWith('text/')) return 'text';
   return null;
 }
@@ -68,7 +69,7 @@ async function parsePdfText(data: ArrayBuffer): Promise<string> {
     for (let index = 1; index <= document.numPages; index += 1) {
       const content = await (await document.getPage(index)).getTextContent();
       const line = content.items.map((item) => ('str' in item ? item.str : '')).join(' ').trim();
-      if (line) pages.push(line);
+      if (line) pages.push(`第 ${index} 页：${line}`);
       validatedProjectDocumentText(pages.join('\n'));
     }
   } finally {
@@ -78,11 +79,37 @@ async function parsePdfText(data: ArrayBuffer): Promise<string> {
   return pages.join('\n');
 }
 
+async function parsePptxText(data: ArrayBuffer): Promise<string> {
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(data);
+  const slideNames = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => Number(a.match(/slide(\d+)\.xml$/i)?.[1]) - Number(b.match(/slide(\d+)\.xml$/i)?.[1]));
+  const decoder = document.implementation.createHTMLDocument('').createElement('textarea');
+  const pages: string[] = [];
+  for (const [index, name] of slideNames.entries()) {
+    const xml = await zip.files[name]!.async('string');
+    const text = [...xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi)]
+      .map((match) => {
+        decoder.innerHTML = match[1] ?? '';
+        return decoder.value;
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) pages.push(`第 ${index + 1} 页：${text}`);
+  }
+  const text = validatedProjectDocumentText(pages.join('\n'));
+  if (!text) throw new Error('pptx produced no readable text (images-only or malformed presentation)');
+  return text;
+}
+
 export async function readProjectDocument(file: File): Promise<string> {
   assertProjectDocumentSize(file.size);
   const kind = projectDocumentKind(file);
   if (kind === 'docx') return parseDocxText(await file.arrayBuffer());
   if (kind === 'pdf') return parsePdfText(await file.arrayBuffer());
+  if (kind === 'pptx') return parsePptxText(await file.arrayBuffer());
   if (kind === 'text') return validatedProjectDocumentText(await file.text());
   throw new Error('此文件不是可读取的文档');
 }

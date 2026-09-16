@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { getAgentModelSnapshot, subscribeAgentModels, type AgentModelSnapshot } from '../../agent/model-selection';
+import { useEffect, useRef, useState, type ChangeEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { useT } from '../../i18n/locale';
 import { loadProject, loadProjectThumb, saveProjectThumb } from '../../persist/projectStore';
 import type { ProjectMeta } from '../../persist/projectStoreCoordinators';
@@ -15,7 +14,7 @@ export interface DashboardProps {
   onImport: (file: File) => Promise<string>;
 }
 
-export type DashboardDialog = 'settings' | 'shortcuts' | 'mcp' | 'cleanup' | 'storage';
+export type DashboardDialog = 'shortcuts' | 'cleanup';
 
 interface RenameModel {
   editingId: string | null;
@@ -37,7 +36,6 @@ interface TransferModel {
 }
 
 export interface DashboardModel {
-  modelSnapshot: AgentModelSnapshot;
   query: string;
   normalizedQuery: string;
   visibleProjects: ProjectMeta[];
@@ -164,7 +162,7 @@ function useProjectTransfer(onImport: DashboardProps['onImport']): TransferModel
 }
 
 function useDashboardDialogs() {
-  const [dialogs, setDialogs] = useState<Record<DashboardDialog, boolean>>({ settings: false, shortcuts: false, mcp: false, cleanup: false, storage: false });
+  const [dialogs, setDialogs] = useState<Record<DashboardDialog, boolean>>({ shortcuts: false, cleanup: false });
   const setDialog = (dialog: DashboardDialog, open: boolean) => {
     setDialogs((current) => ({ ...current, [dialog]: open }));
   };
@@ -172,7 +170,6 @@ function useDashboardDialogs() {
 }
 
 export function useDashboardModel(props: DashboardProps): DashboardModel {
-  const modelSnapshot = useSyncExternalStore(subscribeAgentModels, getAgentModelSnapshot);
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visibleProjects = normalizedQuery
@@ -183,7 +180,6 @@ export function useDashboardModel(props: DashboardProps): DashboardModel {
   const transfer = useProjectTransfer(props.onImport);
   const thumbs = useProjectPosters(props.projects);
   return {
-    modelSnapshot,
     query,
     normalizedQuery,
     visibleProjects,

@@ -112,7 +112,7 @@ export function createChatAttachmentImporter(binding: AttachmentImportBinding): 
     const media = files.filter((file) => chatDocumentKind(file) === null && kindOf(file) !== null);
     const unsupported = files.length - documents.length - media.length;
     binding.setError(unsupported > 0
-      ? binding.t('已忽略不支持的文件（仅支持 视频 / 图片 / 音频 / GIF / SVG / md / txt / srt / csv / docx / pdf）')
+      ? binding.t('已忽略不支持的文件（仅支持 视频 / 图片 / 音频 / GIF / SVG / md / txt / srt / csv / docx / pdf / pptx）')
       : null);
     const parsed = await readProjectDocumentFiles(documents);
     if (parsed.blocks.length) {

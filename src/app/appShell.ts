@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { applyLiveCaps, applyLiveKeyStatus, applyLiveModels } from '../agent/capabilities';
 import { fetchCodexModels, fetchCodexStatus } from '../agent/codex/client';
 import { fetchCopilotModels, fetchCopilotStatus } from '../agent/copilot/client';
-import { applyAgentModelStatus, applyCodexAgentStatus, applyCopilotAgentStatus, selectAgentModel, getActiveAgentModelChoice, getAgentModelSnapshot } from '../agent/model-selection';
+import { applyAgentModelStatus, applyCodexAgentStatus, applyCopilotAgentStatus } from '../agent/model-selection';
 import { loadAgentModelPref } from '../persist/sessionPrefs';
 import type { ProjectDoc, TimelineState } from '../editor/types';
 import {
@@ -22,6 +22,7 @@ interface LiveAgentStatus {
   readonly caps?: Record<string, boolean>;
   readonly keys?: Record<string, { readonly configured: boolean }>;
   readonly models?: Record<string, string>;
+  readonly platformManaged?: boolean;
 }
 
 const emptyState = (): TimelineState => ({
@@ -67,50 +68,44 @@ async function syncCopilotBackend(
 }
 
 export async function syncAgentBackends(isActive: () => boolean): Promise<void> {
-  const [keyResult, codexResult] = await Promise.allSettled([
-    fetch('/api/keys').then(async (response): Promise<LiveAgentStatus> => {
-      if (!response.ok) throw new Error('Agent key status is unavailable.');
-      return response.json() as Promise<LiveAgentStatus>;
-    }),
-    fetchCodexStatus(),
-  ]);
+  const keyResult = await fetch('/api/keys').then(async (response): Promise<LiveAgentStatus> => {
+    if (!response.ok) throw new Error('Agent key status is unavailable.');
+    return response.json() as Promise<LiveAgentStatus>;
+  }).catch(() => null);
   if (!isActive()) return;
   let savedCodexModel: string | undefined;
   let savedCodexReasoningEffort: string | undefined;
-  if (keyResult.status === 'fulfilled') {
-    const { caps, keys, models } = keyResult.value;
+  if (keyResult) {
+    const { caps, keys, models, platformManaged } = keyResult;
     if (caps) applyLiveCaps(caps);
     if (keys) applyLiveKeyStatus(keys);
     if (models) {
       applyLiveModels(models);
-      applyAgentModelStatus(keys ?? {}, models);
+      applyAgentModelStatus(keys ?? {}, models, platformManaged === true);
       savedCodexModel = models.CODEX_MODEL;
       savedCodexReasoningEffort = models.CODEX_REASONING_EFFORT;
-      if (models.COPILOT_MODEL || loadAgentModelPref()?.startsWith('copilot:')) {
+      if (platformManaged !== true
+        && (models.COPILOT_MODEL || loadAgentModelPref()?.startsWith('copilot:'))) {
         void syncCopilotBackend(isActive, models.COPILOT_MODEL, models.COPILOT_REASONING_EFFORT);
       }
+    } else if (platformManaged === true) {
+      applyAgentModelStatus(keys ?? {}, {}, true);
     }
     startUiLocaleSync(models?.UI_LOCALE);
+    if (platformManaged === true) return;
   }
-  if (codexResult.status !== 'fulfilled') return;
-  const modelResult = codexResult.value.installed && codexResult.value.account?.type !== 'apiKey'
+  const codexStatus = await fetchCodexStatus().catch(() => null);
+  if (!codexStatus || !isActive()) return;
+  const modelResult = codexStatus.installed && codexStatus.account?.type !== 'apiKey'
     ? await fetchCodexModels().catch(() => null)
     : null;
   if (!isActive()) return;
   applyCodexAgentStatus(
-    codexResult.value,
+    codexStatus,
     savedCodexModel,
     savedCodexReasoningEffort,
     modelResult && !modelResult.error ? modelResult.models : [],
   );
-  // When Codex (the MCP route) is available and the user has never pinned a
-  // model, make Codex the active model so the composer starts on the MCP
-  // backend instead of the configured default LLM.
-  const active = getActiveAgentModelChoice();
-  if (active && active.backend !== 'codex' && !loadAgentModelPref()) {
-    const codex = getAgentModelSnapshot().choices.find((choice) => choice.backend === 'codex');
-    if (codex) selectAgentModel(codex.id);
-  }
 }
 
 export function useAppRoute(): AppRoute {

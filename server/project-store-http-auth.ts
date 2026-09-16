@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { runtimeProfile, type RuntimeProfile } from './runtime-profile.ts';
 import { isLoopbackAddress } from './loopback-address.ts';
+import { platformManaged, platformSession } from './platform-session.ts';
 
 /**
  * Local-device trust model (no shared secrets).
@@ -67,11 +68,13 @@ function browserEnforcedRequest(req: IncomingMessage): boolean {
 /** Read-only access: loopback requests from same-origin pages (or direct
  *  local navigation) may read the active runtime profile's project library. */
 export function projectStoreReadAuthorized(req: IncomingMessage): boolean {
+  if (platformManaged()) return platformSession(req) !== null;
   return trustedLoopback(req) && browserEnforcedRequest(req);
 }
 
 /** Write access: loopback, same-origin, browser-enforced requests only. */
 export function projectStoreHttpAuthorized(req: IncomingMessage): boolean {
+  if (platformManaged()) return platformSession(req) !== null && sameOrigin(req);
   return trustedLoopback(req) && browserEnforcedRequest(req) && sameOrigin(req);
 }
 

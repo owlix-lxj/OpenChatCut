@@ -20,6 +20,7 @@ import {
   type ModelCapabilityOverride,
   type ModelIdentity,
 } from '../../shared/model-capabilities';
+import { isPlatformLlmProvider, PLATFORM_DEFAULT_LLM_CONFIG } from '../../shared/platform-config';
 import { setLlmConfig } from './providerConfig';
 
 interface KeyStateLike {
@@ -47,6 +48,8 @@ export interface AgentModelSnapshot {
 let snapshot: AgentModelSnapshot = { choices: [], activeId: '', loaded: false };
 let apiModelChoices: readonly AgentModelChoice[] = [];
 let codexModelChoices: readonly AgentModelChoice[] = [];
+let platformManagedMode = false;
+let lastApiProvider: LlmProvider | '' = '';
 let capabilityOverrides: readonly ModelCapabilityOverride[] = [];
 let codexStatus: CodexAgentStatus | null = null;
 let codexSavedModel = '';
@@ -93,12 +96,16 @@ function modelCapabilities(identity: ModelIdentity): ModelCapabilities {
 function apiChoices(
   keys: Record<string, KeyStateLike>,
   models: Record<string, string>,
+  platformManaged = false,
 ): readonly AgentModelChoice[] {
   return LLM_PROVIDER_PRESETS.flatMap((preset): AgentModelChoice[] => {
+    if (platformManaged && !isPlatformLlmProvider(preset.id)) return [];
     const names = llmProviderConfigNames(preset.id);
     const savedModel = models[names.model]?.trim() ?? '';
     if (isLocalLlmProvider(preset.id) ? !savedModel : !keys[names.apiKey]?.configured) return [];
-    const model = savedModel || defaultModelForProvider(preset.id);
+    const model = platformManaged && isPlatformLlmProvider(preset.id)
+      ? PLATFORM_DEFAULT_LLM_CONFIG[preset.id].model
+      : savedModel || defaultModelForProvider(preset.id);
     const identity: ModelIdentity = { backend: 'api', provider: preset.id, modelId: model };
     return [{
       id: `${preset.id}:${model}`,
@@ -124,11 +131,26 @@ function chooseInitialApiId(
   return choices.find((choice) => choice.provider === preferred)?.id ?? choices[0]?.id ?? '';
 }
 
+/**
+ * A provider change in .env/settings is authoritative for the initial API
+ * choice. Keep an explicitly selected non-API backend (Codex/Copilot), but do
+ * not resurrect a stale API choice from the previous provider.
+ */
+function matchesInitialApiChoice(
+  choice: AgentModelChoice | undefined,
+  initialApiId: string,
+): boolean {
+  if (!choice) return false;
+  return !initialApiId || choice.backend !== 'api' || choice.id === initialApiId;
+}
+
 function allChoices(): readonly AgentModelChoice[] {
-  return [...apiModelChoices, ...codexModelChoices, ...copilotModelChoices];
+  return platformManagedMode
+    ? apiModelChoices
+    : [...apiModelChoices, ...codexModelChoices, ...copilotModelChoices];
 }
 function rebuildCodexChoices(): void {
-  if (!codexStatus?.installed || codexStatus.account?.type === 'apiKey') {
+  if (platformManagedMode || !codexStatus?.installed || codexStatus.account?.type === 'apiKey') {
     codexModelChoices = [];
     return;
   }
@@ -159,7 +181,10 @@ function rebuildCodexChoices(): void {
  * every OpenChatCut editing flow needs tool calls.
  */
 function rebuildCopilotChoices(): void {
-  if (!copilotStatus?.installed || !copilotStatus.supported || !copilotStatus.authenticated) {
+  if (platformManagedMode
+    || !copilotStatus?.installed
+    || !copilotStatus.supported
+    || !copilotStatus.authenticated) {
     copilotModelChoices = [];
     return;
   }
@@ -207,9 +232,11 @@ function rebuildCopilotChoices(): void {
 export function applyAgentModelStatus(
   keys: Record<string, KeyStateLike>,
   models: Record<string, string>,
+  platformManaged = false,
 ): void {
+  platformManagedMode = platformManaged;
   capabilityOverrides = safeOverrides(models[MODEL_CAPABILITY_OVERRIDES_KEY]);
-  apiModelChoices = apiChoices(keys, models);
+  apiModelChoices = apiChoices(keys, models, platformManaged);
   codexSavedModel = models.CODEX_MODEL?.trim() ?? codexSavedModel;
   codexSavedReasoningEffort = models.CODEX_REASONING_EFFORT?.trim() ?? codexSavedReasoningEffort;
   copilotSavedModel = models.COPILOT_MODEL?.trim() ?? copilotSavedModel;
@@ -219,10 +246,22 @@ export function applyAgentModelStatus(
   const choices = allChoices();
   const initialApiId = chooseInitialApiId(apiModelChoices, models);
   const preferred = loadAgentModelPref();
-  const preserved = choices.some((choice) => choice.id === preferred) ? preferred
-    : choices.some((choice) => choice.id === snapshot.activeId) ? snapshot.activeId : '';
-  commitChoices(choices, preserved || codexModelChoices[0]?.id || initialApiId || choices[0]?.id || '', true,
+  const preferredChoice = choices.find((choice) => choice.id === preferred);
+  const activeChoice = choices.find((choice) => choice.id === snapshot.activeId);
+  const initialProvider = apiModelChoices.find((choice) => choice.id === initialApiId)?.provider ?? '';
+  const preserved = platformManagedMode
+    ? (matchesInitialApiChoice(preferredChoice, initialApiId) ? preferred
+      : matchesInitialApiChoice(activeChoice, initialApiId) ? snapshot.activeId : '')
+    : preferredChoice && (!snapshot.activeId || preferred === snapshot.activeId) ? preferred
+      : activeChoice && (activeChoice.backend !== 'api' || initialProvider === lastApiProvider)
+        ? snapshot.activeId : '';
+  // Respect the configured API provider as the first-run fallback. Codex is an
+  // independent backend and should remain available as a choice, but it must
+  // not displace an explicitly configured LLM merely because its status loaded
+  // first or because Codex happens to be installed.
+  commitChoices(choices, preserved || initialApiId || codexModelChoices[0]?.id || choices[0]?.id || '', true,
     apiModelChoices.find((choice) => choice.id === initialApiId));
+  lastApiProvider = initialProvider;
 }
 
 function selectedReasoningEffort(requested: string | undefined, capabilities: ModelCapabilities): string {
@@ -249,8 +288,11 @@ export function applyCodexAgentStatus(
   rebuildCodexChoices();
   const choices = allChoices();
   const preffered = loadAgentModelPref();
-  const preserved = choices.some((choice) => choice.id === preffered) ? preffered
-    : choices.some((choice) => choice.id === snapshot.activeId) ? snapshot.activeId : '';
+  // The API sync has already applied the configured provider. Preserve the
+  // current active choice first so a stale API preference cannot displace it
+  // when Codex status arrives asynchronously.
+  const preserved = choices.some((choice) => choice.id === snapshot.activeId) ? snapshot.activeId
+    : choices.some((choice) => choice.id === preffered) ? preffered : '';
   commitChoices(choices, preserved || codexModelChoices[0]?.id || choices[0]?.id || '', true);
 }
 
@@ -267,8 +309,8 @@ export function applyCopilotAgentStatus(
   rebuildCopilotChoices();
   const choices = allChoices();
   const preferred = loadAgentModelPref();
-  const preserved = choices.some((choice) => choice.id === preferred) ? preferred
-    : choices.some((choice) => choice.id === snapshot.activeId) ? snapshot.activeId : '';
+  const preserved = choices.some((choice) => choice.id === snapshot.activeId) ? snapshot.activeId
+    : choices.some((choice) => choice.id === preferred) ? preferred : '';
   commitChoices(choices, preserved || choices[0]?.id || '', true);
 }
 

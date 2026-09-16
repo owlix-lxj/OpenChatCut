@@ -11,7 +11,7 @@ import { Divider } from '../components/Divider';
 import { AppToastHost } from '../ui/AppToastHost';
 // Opened on demand, so they load on demand — see workspaceDialogs.tsx.
 import {
-  DesignStylePanel, ExportDialog, SettingsDialog, ShortcutsDialog, VersionHistory,
+  DesignStylePanel, ExportDialog, ShortcutsDialog, VersionHistory,
 } from './workspaceDialogs';
 import { useWorkspaceDialogPrefetch } from './workspaceDialogLoaders';
 
@@ -23,7 +23,6 @@ export interface EditorWorkspaceViewProps {
   designStylePanel: ComponentProps<typeof DesignStylePanel> | null;
   versionHistory: ComponentProps<typeof VersionHistory> | null;
   shortcutsDialog: ComponentProps<typeof ShortcutsDialog> | null;
-  settingsDialog: ComponentProps<typeof SettingsDialog> | null;
   chatPanel: ComponentProps<typeof ChatPanel>;
   chatCollapsed: boolean;
   onResizeChat: ComponentProps<typeof Divider>['onResize'];
@@ -84,7 +83,6 @@ export function EditorWorkspaceView(props: EditorWorkspaceViewProps) {
           it did before it was opened. The idle prefetch keeps that window tiny. */}
       <Suspense fallback={null}>
         {props.exportDialog && <ExportDialog {...props.exportDialog} />}
-        {props.settingsDialog && <SettingsDialog {...props.settingsDialog} />}
         {props.designStylePanel && <DesignStylePanel {...props.designStylePanel} />}
         {props.versionHistory && <VersionHistory {...props.versionHistory} />}
         {props.shortcutsDialog && <ShortcutsDialog {...props.shortcutsDialog} />}

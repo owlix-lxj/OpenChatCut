@@ -26,13 +26,13 @@ const {
 const EXPECTED_PAGES = [
   ...LLM_PROVIDER_PRESETS.map((preset) => `llm/${preset.id}`),
   'image/openai', 'image/gemini', 'image/minimax', 'image/wavespeed', 'image/byteplus', 'image/xai',
-  'voice/elevenlabs', 'voice/openai', 'voice/gemini', 'voice/mistral', 'voice/cartesia',
+  'voice/elevenlabs', 'voice/openai', 'voice/gemini', 'voice/mistral', 'voice/cartesia', 'voice/qwen',
   'voice/doubao', 'voice/minimax', 'voice/inworld', 'voice/fishaudio', 'voice/speechify',
-  'video/seedance', 'video/kling', 'video/hailuo', 'video/byteplus', 'video/xai', 'video/ofox',
+  'video/seedance', 'video/kling', 'video/hailuo', 'video/byteplus', 'video/xai', 'video/ofox', 'video/jimeng-avatar',
   'music/mureka', 'music/minimax', 'music/atlas', 'music/sonilo',
   'stock/pexels', 'stock/pixabay', 'stock/unsplash', 'stock/freesound',
   'transcription/assemblyai', 'transcription/openai', 'transcription/mistral',
-  'transcription/deepgram', 'transcription/groq', 'transcription/elevenlabs', 'transcription/cartesia',
+  'transcription/deepgram', 'transcription/groq', 'transcription/elevenlabs', 'transcription/cartesia', 'transcription/qwen',
   'sandbox/e2b',
   'web/firecrawl',
   'storage/r2', 'storage/local',
@@ -83,6 +83,8 @@ assert.match(networkMessage(Object.assign(new Error('The operation was aborted d
   // Doubao requires both keys: only the App ID is still unconfigured
   const half = await runProbe('voice/doubao', { DOUBAO_TTS_APP_ID: 'a' });
   assert.match(half.message, /尚未填写 API Key/);
+  const jimengHalf = await runProbe('video/jimeng-avatar', { JIMENG_ACCESS_KEY: 'a' });
+  assert.match(jimengHalf.message, /尚未填写 API Key/);
 }
 
 // 7. Proxy page uses its own connectivity semantics rather than provider/API-key language.
@@ -107,10 +109,12 @@ assert.match(networkMessage(Object.assign(new Error('The operation was aborted d
     await runProbe('voice/openai', { OPENAI_API_KEY: 'test', IMAGE_BASE_URL: 'https://proxy.example/v1/' });
     await runProbe('voice/gemini', { GEMINI_API_KEY: 'test', GEMINI_BASE_URL: 'https://proxy.example/v1beta' });
     await runProbe('voice/mistral', { LLM_MISTRAL_API_KEY: 'test', LLM_MISTRAL_BASE_URL: 'https://proxy.example' });
+    await runProbe('voice/qwen', { LLM_QWEN_API_KEY: 'test', QWEN_AUDIO_BASE_URL: 'https://proxy.example/api/v1' });
     assert.deepEqual(urls, [
       'https://proxy.example/v1/models',
       'https://proxy.example/v1beta/models?pageSize=1',
       'https://proxy.example/v1/models',
+      'https://proxy.example/compatible-mode/v1/models',
     ]);
   } finally {
     globalThis.fetch = originalFetch;

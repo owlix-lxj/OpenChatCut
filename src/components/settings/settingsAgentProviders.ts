@@ -13,11 +13,8 @@ const llmPage = (preset: (typeof LLM_PROVIDER_PRESETS)[number]): SettingsVendorP
     vendor: preset.id as VendorId,
     title: preset.label,
     note: preset.id === 'anthropic'
-      ? '内置 Agent 需要 Anthropic API Key。Claude Code 订阅用户请通过「外部 Agent 接入 (MCP)」连接；OpenChatCut 不接收 Claude OAuth。'
+      ? '内置 Agent 需要 Anthropic API Key；请直接配置可用的 API 地址和密钥。'
       : '每个厂商独立保存地址、密钥与模型。先测试连接，成功后可从接口返回的模型中选择。',
-    ...(preset.id === 'anthropic'
-      ? { noteAction: { label: '外部 Agent 接入 (MCP)', action: 'open-mcp-guide' } }
-      : {}),
     fields: [
       {
         name: names.baseUrl,

@@ -3,7 +3,7 @@ import { sourceWindowForTimelineRange } from '../editor/sourceLimit';
 
 export interface SubmitVideoArgs {
   operationId?: string;
-  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox';
+  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'jimeng-avatar';
   prompt?: string;
   name?: string;
   durationSeconds?: number | string;
@@ -15,6 +15,8 @@ export interface SubmitVideoArgs {
   refImages?: string[];
   refVideos?: string[];
   refAudios?: string[];
+  /** Required for photo-based digital human generation when a recognizable real person is involved. */
+  likenessConsent?: boolean;
   /** Kling only: feature (default) = motion/style ref; base = video to edit. */
   refVideoMode?: 'feature' | 'base';
   /** Hailuo only: MiniMax prompt optimizer (default true). */
@@ -203,6 +205,11 @@ export function preflightGenerationReferences(
     if (imageCount > maxImages) {
       issues.push({ code: 'kling_image_limit', model, role: 'reference-image', message: `kling accepts at most ${maxImages} total image references for this request` });
     }
+  }
+  if (model === 'jimeng-avatar') {
+    if (firstFrames !== 1) issues.push({ code: 'jimeng_first_frame_required', model, role: 'first-frame', message: 'jimeng-avatar requires exactly one firstFrame image' });
+    if (audios !== 1) issues.push({ code: 'jimeng_audio_required', model, role: 'reference-audio', message: 'jimeng-avatar requires exactly one refAudios audio asset' });
+    if (lastFrames || images || videos) issues.push({ code: 'jimeng_reference_role', model, message: 'jimeng-avatar supports only one firstFrame image and one refAudios audio asset' });
   }
   if (issues.length) throw new GenerationReferencePreflightError(issues);
 }

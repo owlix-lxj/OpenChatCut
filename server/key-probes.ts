@@ -20,6 +20,7 @@ import {
   type LlmProvider,
 } from '../shared/llm-providers.ts';
 import { versionedApiBaseUrl } from './plugins/media-provider-config.ts';
+import { signVolcengineRequest } from './plugins/volcengine-signature.ts';
 import { xaiOauthAccessToken } from './xai-oauth-session.ts';
 import {
   classifyStatus,
@@ -203,6 +204,18 @@ const mistralMediaProbe: ProbeDef = {
   }),
 };
 
+const qwenMediaProbe: ProbeDef = {
+  needs: [['LLM_QWEN_API_KEY']],
+  run: (get) => {
+    const configured = (get('QWEN_AUDIO_BASE_URL') || get('LLM_QWEN_BASE_URL') || 'https://dashscope.aliyuncs.com').replace(/\/+$/, '');
+    const root = /\/compatible-mode\/v\d+(?:beta)?$/i.test(configured)
+      ? configured
+      : `${configured.replace(/\/api\/v\d+(?:beta)?$/i, '')}/compatible-mode/v1`;
+    return fetchWithProxy(`${root}/models`, { signal: t(), headers: bearer(get('LLM_QWEN_API_KEY')) });
+  },
+  models: parseModelCatalog,
+};
+
 const deepgramProbe: ProbeDef = {
   needs: [['DEEPGRAM_API_KEY']],
   run: (get) => fetch('https://api.deepgram.com/v1/projects', {
@@ -228,6 +241,41 @@ const xaiMediaProbe: ProbeDef = {
     });
   },
   models: parseModelCatalog,
+};
+
+function jimengPostCheck(bodyText: string): string | null {
+  try {
+    const body = JSON.parse(bodyText) as { code?: number; message?: string };
+    if (body.code === undefined || body.code === 10000) return null;
+    return `即梦数字人 ${body.code}${body.message ? ` · ${sanitize(body.message)}` : ''}`;
+  } catch {
+    return null;
+  }
+}
+
+const jimengAvatarProbe: ProbeDef = {
+  needs: [['JIMENG_ACCESS_KEY', 'JIMENG_SECRET_KEY']],
+  run: (get) => {
+    // Querying a deliberately nonexistent task is read-only and does not create
+    // billable media; a signed 2xx response proves the AK/SK pair is accepted.
+    const request = signVolcengineRequest({
+      baseUrl: base(get, 'JIMENG_BASE_URL', 'https://visual.volcengineapi.com'),
+      action: 'CVSync2AsyncGetResult',
+      body: {
+        req_key: 'jimeng_realman_avatar_picture_omni_v2',
+        task_id: 'openchatcut-credential-probe',
+      },
+      credentials: {
+        accessKeyId: get('JIMENG_ACCESS_KEY'),
+        secretAccessKey: get('JIMENG_SECRET_KEY'),
+      },
+    });
+    return fetchWithProxy(request.url, {
+      method: 'POST', signal: t(), headers: request.headers, body: request.body,
+    });
+  },
+  postCheck: jimengPostCheck,
+  okText: () => '连接成功 · 即梦数字人鉴权通过',
 };
 
 const elevenLabsProbe: ProbeDef = {
@@ -256,10 +304,14 @@ export const PROBES: Record<string, ProbeDef> = {
     llmProbe(preset.id),
   ])),
   'image/openai': {
-    needs: [['IMAGE_API_KEY'], ['OPENAI_API_KEY']],
-    run: (get) => fetch(`${base(get, 'IMAGE_BASE_URL', 'https://api.openai.com')}/v1/models`, {
-      signal: t(), headers: bearer(get('IMAGE_API_KEY') || get('OPENAI_API_KEY')),
-    }),
+    needs: [['IMAGE_API_KEY'], ['OPENAI_API_KEY'], ['LLM_OPENAI_API_KEY']],
+    run: (get) => {
+      const root = get('IMAGE_BASE_URL') || get('LLM_OPENAI_BASE_URL') || 'https://api.openai.com';
+      const key = get('IMAGE_API_KEY') || get('OPENAI_API_KEY') || get('LLM_OPENAI_API_KEY');
+      return fetch(`${versionedApiBaseUrl(root, 'v1')}/models`, {
+        signal: t(), headers: bearer(key),
+      });
+    },
   },
   'image/gemini': geminiMediaProbe,
   'image/minimax': minimaxProbe,
@@ -276,6 +328,7 @@ export const PROBES: Record<string, ProbeDef> = {
   'voice/gemini': geminiMediaProbe,
   'voice/mistral': mistralMediaProbe,
   'voice/cartesia': cartesiaProbe,
+  'voice/qwen': qwenMediaProbe,
   // openpeech does not have free probing endpoints, synthesizing 1 word is the minimum real verification (the cost is negligible).
   'voice/doubao': {
     needs: [['DOUBAO_TTS_APP_ID', 'DOUBAO_TTS_ACCESS_KEY']],
@@ -330,6 +383,7 @@ export const PROBES: Record<string, ProbeDef> = {
   'video/hailuo': minimaxProbe,
   'video/byteplus': byteplusProbe,
   'video/xai': xaiMediaProbe,
+  'video/jimeng-avatar': jimengAvatarProbe,
   'video/ofox': {
     needs: [['LLM_OFOX_API_KEY']],
     run: (get) => fetch(`${base(get, 'LLM_OFOX_BASE_URL', 'https://api.ofox.ai/v1')}/models`, {
@@ -396,6 +450,7 @@ export const PROBES: Record<string, ProbeDef> = {
   'transcription/groq': groqProbe,
   'transcription/elevenlabs': elevenLabsProbe,
   'transcription/cartesia': cartesiaProbe,
+  'transcription/qwen': qwenMediaProbe,
   'sandbox/e2b': {
     needs: [['E2B_API_KEY']],
     run: (get) => fetch('https://api.e2b.dev/sandboxes', {

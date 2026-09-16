@@ -4,7 +4,9 @@
 // Rules: Use useT() (subscription switching) in React components; pure helper modules can directly import { t }
 //  — As long as the component that renders its output calls useT(), it will be recalculated when switching languages.
 // LLM interface (systemPrompt/tool ​​description/skill content) and persistent dynamic history tags do not enter i18n.
-// Default language: the saved choice wins; otherwise the system language (zh/ru), and English for everything else.
+// Default language: Chinese. The locale implementation remains available for
+// compatibility with existing data and verification, while the product UI no
+// longer exposes a language switcher.
 import { useSyncExternalStore } from 'react';
 import { ensureLocaleDict, localeDictReady, localeDicts } from './dictRegistry';
 
@@ -22,26 +24,14 @@ const DOCUMENT_LANG: Record<Locale, string> = {
   ru: 'ru',
 };
 
-function systemLocale(): Locale {
-  try {
-    const tag = String(navigator.language ?? '').toLowerCase();
-    if (tag.startsWith('zh')) return 'zh';
-    if (tag.startsWith('it')) return 'it';
-    if (tag.startsWith('ru')) return 'ru';
-    return 'en';
-  } catch {
-    return 'en';
-  }
-}
-
 function readInitial(): Locale {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'zh' || stored === 'en' || stored === 'it' || stored === 'ru') return stored;
   } catch {
-    // Private mode / storage disabled → system language below.
+    // Private mode / storage disabled → the Chinese default below.
   }
-  return systemLocale();
+  return 'zh';
 }
 
 let current: Locale = readInitial();

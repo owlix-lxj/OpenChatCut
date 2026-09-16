@@ -26,6 +26,7 @@ import type {
   ServerRunToolAction,
 } from './serverRunProtocol';
 import { useServerRunProposalCallbacks } from './serverRunProposalLifecycle';
+import type { ChatConversationSummary } from '../persist/chatConversations';
 
 export interface ServerRunProposalBridge {
   readonly onRunPrepare: (input: ServerRunPreparation) => Promise<void>;
@@ -44,6 +45,10 @@ export interface ServerRunProposalBridge {
   readonly rejectProposal: () => void;
   readonly reProposeStale: () => void;
   readonly clearHistory: () => void;
+  readonly newConversation: () => void;
+  readonly switchConversation: (id: string) => void;
+  readonly activeConversationId: string | null;
+  readonly conversations: ChatConversationSummary[];
   readonly rollbackChangeSession: (id: string, force?: boolean) => boolean;
   readonly canRollbackChangeSession: (id: string) => boolean;
   readonly rewindTurn: (index: number) => boolean;
@@ -135,6 +140,8 @@ export function useServerRunProposalBridge(
       state.proposal && isProposalStale(state.proposal, ctx.getDoc()),
     ),
     changeLog: state.changeLog,
+    activeConversationId: state.conversationId,
+    conversations: state.conversations,
     ...proposalActions,
     ...historyActions,
   };

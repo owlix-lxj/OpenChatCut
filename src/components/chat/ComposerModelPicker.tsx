@@ -2,12 +2,13 @@ import { useT } from '../../i18n/locale';
 import { theme } from '../../theme';
 import { selectAgentModel } from '../../agent/model-selection';
 import { Icon } from '../icons';
+import { VendorIcon } from '../settings/vendorIcons';
 import { ComposerPopover } from './ComposerPopover';
 import type { ComposerModelView } from './useComposerModelView';
 import codexPng from '../../../assets/vendor-icons/codex-color.png';
 import copilotSvg from '../../../assets/vendor-icons/copilot.svg?raw';
 
-function ChoiceLogo({ backend }: { backend: 'api' | 'codex' | 'copilot' }) {
+function ChoiceLogo({ backend, provider }: { backend: 'api' | 'codex' | 'copilot'; provider: string }) {
   if (backend === 'copilot') {
     return (
       <span
@@ -17,6 +18,9 @@ function ChoiceLogo({ backend }: { backend: 'api' | 'codex' | 'copilot' }) {
         style={{ width: 18, height: 18, borderRadius: 5, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.panel, border: `0.5px solid ${theme.borderLight}`, color: theme.text, fontSize: 12 }}
       />
     );
+  }
+  if (backend === 'api' && (provider === 'openai' || provider === 'deepseek')) {
+    return <VendorIcon vendor={provider} size={18} />;
   }
   if (backend !== 'codex') return null;
   return (
@@ -52,7 +56,7 @@ export function ComposerModelPicker({ anchor, onClose, view }: {
           <button type="button" key={choice.id}
             onClick={() => { selectAgentModel(choice.id); onClose(); }}
             style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 9px', border: 0, borderRadius: 3, background: active ? theme.panel : 'transparent', color: theme.text, cursor: 'pointer', textAlign: 'left' }}>
-            <ChoiceLogo backend={choice.backend} />
+            <ChoiceLogo backend={choice.backend} provider={choice.provider} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <strong style={{ display: 'block', fontSize: 11.5, fontWeight: 600 }}>{choice.providerLabel}</strong>
               <small style={{ display: 'block', color: theme.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{choice.model}</small>

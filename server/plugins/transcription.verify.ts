@@ -21,6 +21,9 @@ const options: TranscriptionOptions = {
   elevenModel: 'scribe_v2',
   cartesiaApiKey: 'cartesia-test-key',
   cartesiaModel: 'ink-whisper',
+  qwenBaseUrl: 'https://dashscope.test',
+  qwenApiKey: 'qwen-test-key',
+  qwenModel: 'qwen-audio-3.0-asr-flash',
   language: 'zh',
   diarization: true,
 };
@@ -64,6 +67,36 @@ try {
     () => assertTranscriptionProviderConfigured({ ...options, mistralApiKey: '' }, 'mistral'),
     /Mistral API key is not configured/,
   );
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    assert.equal(url, 'https://dashscope.test/api/v1/services/aigc/multimodal-generation/generation');
+    assert.equal(init?.method, 'POST');
+    const body = JSON.parse(init?.body as string) as Record<string, any>;
+    assert.equal(body.model, 'qwen-audio-3.0-asr-flash');
+    assert.equal(body.parameters.format, 'wav');
+    assert.deepEqual(body.parameters.language_hints, ['zh']);
+    assert.match(body.input.messages[0].content[0].input_audio.data, /^data:audio\/wav;base64,/);
+    return Response.json({ output: {
+      text: '你好世界。',
+      sentence: {
+        begin_time: 100, end_time: 900, text: '你好世界。',
+        words: [
+          { text: '你好', begin_time: 100, end_time: 450, punctuation: '' },
+          { text: '世界', begin_time: 500, end_time: 900, punctuation: '。'},
+        ],
+      },
+    } });
+  };
+  const qwen = await transcribeCloudAudio(options, {
+    provider: 'qwen', audio: new TextEncoder().encode('RIFF-audio'), language: 'zh', diarize: true,
+  });
+  assert.equal(qwen.text, '你好世界。');
+  assert.deepEqual(qwen.words, [
+    { text: '你好', start: 100, end: 450, speaker: null },
+    { text: '世界。', start: 500, end: 900, speaker: null },
+  ]);
+  assert.equal(qwen.utterances[0]?.speaker, 'A');
   assert.throws(
     () => assertTranscriptionProviderConfigured({ ...options, cartesiaModel: 'ink-2' }, 'cartesia'),
     /streaming-only/,

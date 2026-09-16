@@ -36,6 +36,7 @@ import {
   parseExternalCancellation as parseCancellation,
   type ExternalCall,
 } from './externalBridgePayload';
+import { withExternalBridgeLock } from './external-bridge-lock';
 export type { ExternalCall } from './externalBridgePayload';
 
 interface ExternalCallRuntime {
@@ -384,7 +385,13 @@ function useExternalPolling(
       );
     };
     window.addEventListener('pagehide', close);
-    void runBridge(projectId, slot.runtime, abortController.signal, setError);
+    void withExternalBridgeLock(
+      projectId,
+      abortController.signal,
+      () => runBridge(projectId, slot.runtime, abortController.signal, setError),
+    ).catch((error) => {
+      if (!abortController.signal.aborted) setError(errorMessage(error));
+    });
     return () => {
       window.removeEventListener('pagehide', close);
       abortController.abort();

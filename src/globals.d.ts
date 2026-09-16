@@ -6,6 +6,7 @@
 // read behind a `typeof … !== 'undefined'` guard. See src/agent/capabilities.ts.
 declare const __CONFIGURED_CAPS__: Record<string, boolean> | undefined;
 declare const __APP_VERSION__: string | undefined;
+declare const __PLATFORM_MANAGED__: boolean | undefined;
 
 declare module '*.frag?raw' {
   const source: string;

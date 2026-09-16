@@ -12,6 +12,7 @@ import {
 import {
   applyAgentModelStatus,
   applyCodexAgentStatus,
+  applyCopilotAgentStatus,
   getAgentModelSnapshot,
   selectAgentModel,
 } from './model-selection.ts';
@@ -148,6 +149,56 @@ assert.equal(vendorConfigured(null, codexPage, {
   ...signedInCodex,
   account: { type: 'apiKey', email: null, planType: null },
 }), false);
+
+const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: { getItem: () => 'codex:gpt-stale', setItem: () => undefined },
+});
+try {
+  applyAgentModelStatus({
+    LLM_OPENAI_API_KEY: { configured: true },
+    LLM_DEEPSEEK_API_KEY: { configured: true },
+    LLM_QWEN_API_KEY: { configured: true },
+  }, {
+    LLM_PROVIDER: 'qwen',
+    LLM_OPENAI_MODEL: 'gpt-stale',
+    LLM_DEEPSEEK_MODEL: 'deepseek-stale',
+    LLM_QWEN_MODEL: 'qwen-plus',
+  }, true);
+  const platformChoiceIds = ['openai:gpt-5.6-terra', 'deepseek:deepseek-chat'];
+  assert.deepEqual(
+    getAgentModelSnapshot().choices.map((choice) => choice.id),
+    platformChoiceIds,
+    'platform mode exposes only its two fixed hosted models',
+  );
+  assert.equal(getAgentModelSnapshot().activeId, platformChoiceIds[0],
+    'a stale local-backend preference falls back to a hosted model');
+
+  applyCodexAgentStatus(signedInCodex, 'gpt-5.6-sol', 'high', [{
+    id: 'gpt-5.6-sol',
+    label: 'GPT-5.6 Sol',
+    isDefault: true,
+    defaultReasoningEffort: 'high',
+    supportedReasoningEfforts: [{ reasoningEffort: 'high', description: 'High' }],
+  }]);
+  assert.deepEqual(getAgentModelSnapshot().choices.map((choice) => choice.id), platformChoiceIds,
+    'Codex discovery cannot reinsert local account models in platform mode');
+
+  applyCopilotAgentStatus({
+    installed: true,
+    version: 'test',
+    path: '/test/copilot',
+    supported: true,
+    authenticated: true,
+    account: { login: 'editor', authType: 'oauth', host: 'github.com' },
+  }, 'gpt-4.1');
+  assert.deepEqual(getAgentModelSnapshot().choices.map((choice) => choice.id), platformChoiceIds,
+    'Copilot discovery cannot reinsert subscription models in platform mode');
+} finally {
+  if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor);
+  else Reflect.deleteProperty(globalThis, 'localStorage');
+}
 globalThis.fetch = originalFetch;
 
 console.log('local model verification passed');

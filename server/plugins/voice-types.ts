@@ -2,7 +2,7 @@ import type { MinimaxLanguageBoost } from '../../shared/media-provider-params.ts
 
 export type VoiceProvider =
   | 'elevenlabs' | 'doubao' | 'minimax' | 'inworld' | 'fishaudio' | 'speechify'
-  | 'openai' | 'gemini' | 'mistral' | 'cartesia';
+  | 'openai' | 'gemini' | 'mistral' | 'cartesia' | 'qwen';
 export type MinimaxVoiceFormat = 'mp3' | 'pcm' | 'flac' | 'wav' | 'pcmu_raw' | 'pcmu_wav' | 'opus';
 export type VoiceEffect = 'spacious_echo' | 'auditorium_echo' | 'lofi_telephone' | 'robotic';
 
@@ -40,6 +40,9 @@ export interface VoiceOptions {
   speechifyBaseUrl: string;
   speechifyApiKey: string;
   speechifyModel: string;
+  qwenBaseUrl: string;
+  qwenApiKey: string;
+  qwenModel: string;
   ai: AiVoiceOptions;
 }
 

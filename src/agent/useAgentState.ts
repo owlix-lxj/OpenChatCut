@@ -8,6 +8,7 @@ import { useAgentContextUsage } from './context-usage';
 import { ToolFailureTracker } from './toolFailure';
 import type { Proposal } from './proposal';
 import type { AgentChangeSession } from './changeLog';
+import type { ChatConversationSummary } from '../persist/chatConversations';
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 export interface MutableValue<T> { current: T }
@@ -40,6 +41,11 @@ export interface AgentHookState {
   toolFailuresRef: MutableValue<ToolFailureTracker>;
   contextUsage: AgentContextUsage | null;
   contextUsageRef: MutableValue<AgentContextUsage | null>;
+  conversationId: string | null;
+  setConversationId: StateSetter<string | null>;
+  conversationIdRef: MutableValue<string | null>;
+  conversations: ChatConversationSummary[];
+  setConversations: StateSetter<ChatConversationSummary[]>;
   replaceContextUsage: (next: AgentContextUsage | null) => void;
   refreshEstimatedContextUsage: () => void;
 }
@@ -52,8 +58,11 @@ export function useAgentState(ctx: AgentContext): AgentHookState {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [proposalStale, setProposalStale] = useState(false);
   const [liveTool, setLiveTool] = useState<LiveTool | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ChatConversationSummary[]>([]);
   const llmRef = useRef<LLMMessage[]>(initialAgentMessages());
   const context = useAgentContextUsage(llmRef);
+  const conversationIdRef = useRef<string | null>(null);
   const llmProviderRef = useRef<LlmProvider>(PROVIDER);
   const ctxRef = useRef(ctx);
   const runningRef = useRef(false);
@@ -65,6 +74,7 @@ export function useAgentState(ctx: AgentContext): AgentHookState {
   const applyingProposalRef = useRef(false);
   const toolFailuresRef = useRef(new ToolFailureTracker());
   ctxRef.current = ctx;
+  conversationIdRef.current = conversationId;
   proposalRef.current = proposal;
   runningRef.current = running;
   changeLogRef.current = changeLog;
@@ -74,6 +84,7 @@ export function useAgentState(ctx: AgentContext): AgentHookState {
     liveTool, setLiveTool, llmRef, llmProviderRef, ctxRef, hydratedRef, hydrationEpochRef,
     proposalRef, runningRef, changeLogRef, abortRef,
     applyingProposalRef, toolFailuresRef,
+    conversationId, setConversationId, conversationIdRef, conversations, setConversations,
     contextUsage: context.usage,
     contextUsageRef: context.usageRef, replaceContextUsage: context.replace,
     refreshEstimatedContextUsage: context.refreshEstimate,

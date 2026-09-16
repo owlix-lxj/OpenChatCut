@@ -94,6 +94,9 @@ await hydrateAgentSession({
   setProposal: () => undefined,
   hydratedRef: { current: false },
   setHydrated: () => undefined,
+  conversationIdRef: { current: null },
+  setConversationId: () => undefined,
+  setConversations: () => undefined,
 } as unknown as AgentHookState, contextProjectId, () => true);
 assert.deepEqual(restoredContextUsage, persistedContextUsage,
   'reopening a project restores its measured context usage');

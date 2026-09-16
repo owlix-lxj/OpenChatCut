@@ -82,7 +82,14 @@ const explicit = expandLlmProviderPatch(new Map([
 assert.equal(explicit.get('LLM_MODEL'), 'gpt-custom');
 assert.equal(explicit.get('LLM_BASE_URL'), 'https://relay.test/v2');
 
-const seen: Array<{ url: string; authorization?: string; provider?: string; body: string; cookie?: string }> = [];
+const seen: Array<{
+  url: string;
+  authorization?: string;
+  provider?: string;
+  internalAuth?: string;
+  body: string;
+  cookie?: string;
+}> = [];
 const upstream = createServer(async (req, res) => {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -91,6 +98,9 @@ const upstream = createServer(async (req, res) => {
     authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
     provider: typeof req.headers['x-openchatcut-provider'] === 'string'
       ? req.headers['x-openchatcut-provider']
+      : undefined,
+    internalAuth: typeof req.headers['x-openchatcut-internal-llm'] === 'string'
+      ? req.headers['x-openchatcut-internal-llm']
       : undefined,
     cookie: typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined,
     body: Buffer.concat(chunks).toString('utf8'),
@@ -137,7 +147,11 @@ try {
   assert.equal(seen.length, 0, 'unsupported provider must not reach the configured fallback upstream');
   const first = await fetch(`http://127.0.0.1:${proxyPort}/llm/chat/completions?stream=true`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-openchatcut-provider': 'kimi' },
+    headers: {
+      'content-type': 'application/json',
+      'x-openchatcut-provider': 'kimi',
+      'x-openchatcut-internal-llm': 'must-not-leak',
+    },
     body: '{"model":"compatible"}',
   });
   assert.equal(first.status, 200);
@@ -162,6 +176,7 @@ try {
       url: '/v1beta/openai/chat/completions?api-version=preview&stream=true',
       authorization: 'Bearer server-secret',
       provider: undefined,
+      internalAuth: undefined,
       cookie: undefined,
       body: '{"model":"compatible"}',
     },
@@ -169,6 +184,7 @@ try {
       url: '/v1/responses',
       authorization: 'Bearer server-secret',
       provider: undefined,
+      internalAuth: undefined,
       cookie: undefined,
       body: '{"model":"openai"}',
     },
@@ -176,6 +192,7 @@ try {
       url: '/v1/responses',
       authorization: 'Bearer server-secret',
       provider: undefined,
+      internalAuth: undefined,
       cookie: undefined,
       body: '{"model":"openai"}',
     },
@@ -190,6 +207,21 @@ try {
   await close(providerProxy);
   await close(proxy);
   await close(upstream);
+}
+
+{
+  const { seedKeystore } = await import('./keystore.ts');
+  const { llmErrorMessage } = await import('./plugins/llm-proxy.ts');
+  seedKeystore({ OPENCHATCUT_PLATFORM_MODE: 'platform' });
+  const deepseekRequest = {
+    headers: { 'x-openchatcut-provider': 'deepseek' },
+  } as never;
+  assert.match(
+    llmErrorMessage(405, deepseekRequest),
+    /平台服务请求失败.*平台管理员/,
+    'platform errors must not direct tenants to edit server-owned credentials',
+  );
+  assert.doesNotMatch(llmErrorMessage(405, deepseekRequest), /设置.*Agent 模型/);
 }
 
 console.log('llm proxy checks passed');

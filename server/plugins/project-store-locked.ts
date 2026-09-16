@@ -24,6 +24,7 @@ interface ProjectStoreEntryAdapterOptions {
   entryPath: (key: string) => string;
   quarantineEntryFile: (file: string, key: string) => Promise<unknown>;
   writeStoredEntry: (key: string, value: unknown) => Promise<void>;
+  storageKey?: (key: string) => string;
 }
 
 export interface ProjectStoreEntryAdapter {
@@ -35,7 +36,7 @@ export function createProjectStoreEntryAdapter(
   options: ProjectStoreEntryAdapterOptions,
 ): ProjectStoreEntryAdapter {
   async function readEntryFile(key: string): Promise<StoredEntryValue> {
-    if (sqliteStoreEnabled()) return sqliteReadEntry(key);
+    if (sqliteStoreEnabled()) return sqliteReadEntry(options.storageKey?.(key) ?? key);
     const file = `${encodeURIComponent(key)}.json`;
     try {
       const raw = await readFile(options.entryPath(key), 'utf8');
@@ -120,7 +121,7 @@ export function createProjectStoreEntryAdapter(
       writeEntryExact: (key, value) => writeEntryExactLocked(key, value, deletedIds),
       removeEntry: async (key) => {
         validateLockedEntryKey(key);
-        if (sqliteStoreEnabled()) await sqliteDeleteEntry(key);
+        if (sqliteStoreEnabled()) await sqliteDeleteEntry(options.storageKey?.(key) ?? key);
         else await durableRemove(options.entryPath(key));
       },
     };

@@ -19,6 +19,7 @@ import {
   resetAgentSessionGenerationMemory,
 } from './agentSessionGeneration';
 import { clearProjectSessionPrefs } from './sessionPrefs';
+import { resetChatConversationMemory } from './chatConversations';
 import { dedupeAssets, normalizeTimelineTracks } from './migrations/normalize';
 import {
   runProjectMigrations,
@@ -72,6 +73,7 @@ export function resetProjectStoreMemory(): void {
   projectSaveCoordinator.reset();
   projectIndexCoordinator.reset();
   chatWriteQueues.clear();
+  resetChatConversationMemory();
   resetSharedKvMemory();
   resetAgentSessionGenerationMemory();
 }

@@ -219,6 +219,11 @@ export async function materializeVideoReferences(input: VideoRequest): Promise<V
     const maxImages = videos ? 4 : 7;
     if (firstFrames + lastFrames + images > maxImages) issues.push({ code: 'kling_image_limit', model: input.model, role: 'reference-image', message: `kling accepts at most ${maxImages} image references for this request` });
   }
+  if (input.model === 'jimeng-avatar') {
+    if (firstFrames !== 1) issues.push({ code: 'jimeng_first_frame_required', model: input.model, role: 'first-frame', message: 'jimeng-avatar requires exactly one firstFrame image' });
+    if (audios !== 1) issues.push({ code: 'jimeng_audio_required', model: input.model, role: 'reference-audio', message: 'jimeng-avatar requires exactly one refAudios audio asset' });
+    if (lastFrames || images || videos) issues.push({ code: 'jimeng_reference_role', model: input.model, message: 'jimeng-avatar supports only one firstFrame image and one refAudios audio asset' });
+  }
   if (issues.length) throw new ServerReferencePreflightError(issues);
 
   const paths = new Map<ServerGenerationReference, string>();

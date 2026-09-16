@@ -95,13 +95,20 @@ function validAssetId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,160}$/.test(value);
 }
 
+// Platform storage prefixes the logical project scope with a tenant/user
+// namespace (`platform-scope:<scope>:<project>`). Keep asset ids strict while
+// allowing that server-generated, colon-delimited physical scope.
+function validScopeId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-zA-Z0-9_:-]{1,256}$/.test(value);
+}
+
 /** Replace one asset's samples in one transaction (delete-then-insert). */
 export function upsertSemanticVectors(
   scopeId: string,
   assetId: string,
   samples: SemanticVectorSample[],
 ): { inserted: number } {
-  if (!validAssetId(scopeId) || !validAssetId(assetId)) throw new Error('invalid semantic vector scope/asset id');
+  if (!validScopeId(scopeId) || !validAssetId(assetId)) throw new Error('invalid semantic vector scope/asset id');
   if (!Array.isArray(samples) || samples.length > 512) throw new Error('invalid semantic vector batch');
   for (const sample of samples) {
     if (!validAssetId(sample.assetId) || !validVector(sample.vector)) {
@@ -143,7 +150,7 @@ export function searchSemanticVectors(
   queryVector: number[],
   limit: number,
 ): SemanticVectorHit[] {
-  if (!validAssetId(scopeId) || !validVector(queryVector)) throw new Error('invalid semantic search input');
+  if (!validScopeId(scopeId) || !validVector(queryVector)) throw new Error('invalid semantic search input');
   const bounded = Math.min(100, Math.max(1, Math.round(Number(limit) || 24)));
   const db = requireConnection();
   const rows = db.prepare(`SELECT asset_id, sample_time, source_revision, scene_id, scene_start, scene_end, distance
@@ -175,7 +182,7 @@ export function pruneSemanticVectors(
   validAssetIds: string[],
   validSourceRevisions?: ReadonlyMap<string, string>,
 ): PruneSemanticResult {
-  if (!validAssetId(scopeId)) throw new Error('invalid semantic vector scope id');
+  if (!validScopeId(scopeId)) throw new Error('invalid semantic vector scope id');
   const db = requireConnection();
   const rows = db.prepare(`SELECT rowid, asset_id, source_revision, model_version
     FROM ${VEC_TABLE} WHERE scope_id = ?`).all(scopeId) as Array<{
@@ -208,6 +215,6 @@ export function pruneSemanticVectors(
 
 /** Remove every vector of a scope. */
 export function clearSemanticVectors(scopeId: string): void {
-  if (!validAssetId(scopeId)) throw new Error('invalid semantic vector scope id');
+  if (!validScopeId(scopeId)) throw new Error('invalid semantic vector scope id');
   requireConnection().prepare(`DELETE FROM ${VEC_TABLE} WHERE scope_id = ?`).run(scopeId);
 }

@@ -3,9 +3,10 @@ import type { Plugin } from 'vite';
 
 import { generateAiVoice, isAiVoiceProvider } from './voice-ai-sdk.ts';
 import { saveVoiceAudio, saveVoiceSubtitle } from './voice-media.ts';
-import { doubaoVoice, elevenLabsVoice, fishAudioVoice, inworldVoice, minimaxVoice, speechifyVoice } from './voice-providers.ts';
+import { doubaoVoice, elevenLabsVoice, fishAudioVoice, inworldVoice, minimaxVoice, qwenAudioVoice, speechifyVoice } from './voice-providers.ts';
 import type { VoiceOptions, VoiceProvider, VoiceRequest } from './voice-types.ts';
 import { validateVoiceRequest } from './voice-validation.ts';
+import { isPlatformManaged } from '../keystore.ts';
 
 export { validateVoiceRequest };
 
@@ -33,6 +34,7 @@ function audioDescriptor(provider: VoiceProvider, outputFormat: string, audioFor
     return { codec, sampleRate: Number(rate) };
   }
   if (provider === 'minimax') return { codec: audioFormat, sampleRate };
+  if (provider === 'qwen') return { codec: outputFormat.toLowerCase().split('_')[0] || 'mp3', sampleRate };
   return { codec: 'mp3', sampleRate: 24_000 };
 }
 
@@ -44,6 +46,9 @@ export function voiceGenerationPlugin(options: VoiceOptions): Plugin {
         if (req.method !== 'POST') { sendJson(res, 405, { error: 'method not allowed — use POST' }); return; }
         try {
           const input = validateVoiceRequest(await readJson(req));
+          if (isPlatformManaged() && input.provider !== 'doubao' && input.provider !== 'minimax' && input.provider !== 'qwen') {
+            throw new Error('平台模式配音统一使用豆包、MiniMax 或阿里云 Qwen');
+          }
           if (isAiVoiceProvider(input.provider)) {
             const audio = await generateAiVoice(options, input);
             const saved = await saveVoiceAudio(audio.bytes, audio.codec, audio.sampleRate);
@@ -60,6 +65,7 @@ export function voiceGenerationPlugin(options: VoiceOptions): Plugin {
           else if (input.provider === 'doubao') bytes = await doubaoVoice(options, input);
           else if (input.provider === 'inworld') bytes = await inworldVoice(options, input);
           else if (input.provider === 'fishaudio') bytes = await fishAudioVoice(options, input);
+          else if (input.provider === 'qwen') bytes = await qwenAudioVoice(options, input);
           else bytes = await speechifyVoice(options, input);
           const audio = audioDescriptor(input.provider, input.outputFormat, input.audioFormat, input.sampleRate);
           const saved = await saveVoiceAudio(bytes, audio.codec, audio.sampleRate, input.provider === 'doubao' ? input.pitch ?? 0 : 0);

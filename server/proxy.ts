@@ -25,6 +25,7 @@ const HOP_BY_HOP = new Set(['host', 'connection', 'keep-alive', 'proxy-authoriza
 // otherwise be forwarded verbatim and rejected by provider gateways (431/400).
 const NEVER_FORWARD: Record<string, true> = {
   'x-openchatcut-provider': true,
+  'x-openchatcut-internal-llm': true,
   cookie: true,
 };
 
@@ -37,10 +38,13 @@ export interface ProxyRoute {
   forceJsonContentType?: boolean;
   /** Replace upstream error bodies with one actionable message. */
   errorMessage?: (status: number, req: IncomingMessage) => string;
+  /** Buffer small JSON requests so strict upstream gateways do not reject chunked bodies. */
+  bufferRequestBody?: boolean;
 }
 
 export function proxyMiddleware(route: ProxyRoute): Middleware {
   return (req, res) => {
+    const forward = (body?: Buffer): void => {
     let target: URL;
     try {
       target = new URL(route.target(req));
@@ -59,6 +63,10 @@ export function proxyMiddleware(route: ProxyRoute): Middleware {
       }
     }
     headers.host = target.host;
+    if (body) {
+      headers['content-length'] = String(body.length);
+      delete headers['transfer-encoding'];
+    }
     for (const [k, v] of Object.entries(route.headers(req))) if (v) headers[k] = v;
 
     const basePath = target.pathname.replace(/\/$/, '');
@@ -117,6 +125,25 @@ export function proxyMiddleware(route: ProxyRoute): Middleware {
       }
     });
     res.on('close', () => upstream.destroy());
-    req.pipe(upstream);
+    if (body) upstream.end(body);
+    else req.pipe(upstream);
+    };
+
+    if (!route.bufferRequestBody) {
+      forward();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (chunk) => {
+      const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += value.length;
+      if (total > 2 * 1024 * 1024) {
+        req.destroy(new Error('proxy request body too large'));
+        return;
+      }
+      chunks.push(value);
+    });
+    req.on('end', () => forward(Buffer.concat(chunks)));
   };
 }

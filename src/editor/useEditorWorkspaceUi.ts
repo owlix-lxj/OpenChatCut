@@ -44,11 +44,8 @@ export interface EditorWorkspaceDialogs {
   setShowVersions: Dispatch<SetStateAction<boolean>>;
   showShortcuts: boolean;
   setShowShortcuts: Dispatch<SetStateAction<boolean>>;
-  showSettings: boolean;
-  setShowSettings: Dispatch<SetStateAction<boolean>>;
-  /** Settings vendor key to open on the next settings dialog mount (e.g. 'local/music/packs'). */
-  settingsRoute: string | undefined;
-  setSettingsRoute: Dispatch<SetStateAction<string | undefined>>;
+  digitalHumanOpenNonce: number;
+  openDigitalHuman: () => void;
   shortcutApiRef: RefObject<TimelineShortcutApi | null>;
   getPlayhead: () => number;
 }
@@ -66,11 +63,11 @@ export function useEditorWorkspaceDialogs({
 }: EditorWorkspaceDialogsInput): EditorWorkspaceDialogs {
   const [chatSeed, setChatSeed] = useState<EditorChatSeed | null>(null);
   const [showDesign, setShowDesign] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
 
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [settingsRoute, setSettingsRoute] = useState<string | undefined>(undefined);
+  const [digitalHumanOpenNonce, setDigitalHumanOpenNonce] = useState(0);
+  const openDigitalHuman = useCallback(() => setDigitalHumanOpenNonce((value) => value + 1), []);
   const shortcutApiRef = useRef<TimelineShortcutApi | null>(null);
   const getPlayhead = useCallback(() => playerRef.current?.getCurrentFrame() ?? 0, [playerRef]);
 
@@ -81,14 +78,12 @@ export function useEditorWorkspaceDialogs({
     setChatSeed,
     showDesign,
     setShowDesign,
-    showSettings,
-    setShowSettings,
-    settingsRoute,
-    setSettingsRoute,
     showVersions,
     setShowVersions,
     showShortcuts,
     setShowShortcuts,
+    digitalHumanOpenNonce,
+    openDigitalHuman,
     shortcutApiRef,
     getPlayhead,
   };

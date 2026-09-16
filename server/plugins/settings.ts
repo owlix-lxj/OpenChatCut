@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
-import { keyStatus, setKeys } from '../keystore.ts';
+import { isPlatformManaged, keyStatus, setKeys } from '../keystore.ts';
 import { runProbe } from '../key-probes.ts';
 import {
   checkMediaDir,
@@ -25,6 +25,12 @@ import {
   writeDataDirPointer,
 } from '../data-dir.ts';
 import { sqliteStoreEnabled } from '../storage/sqlite-store.ts';
+import {
+  PLATFORM_DEFAULT_LLM_CONFIG,
+  PLATFORM_DEFAULT_ROUTES,
+  PLATFORM_LLM_PROVIDERS,
+  PLATFORM_MODE_ENV,
+} from '../../shared/platform-config.ts';
 
 const ISOLATED_R2_SETTINGS = [
   'R2_ACCOUNT_ID',
@@ -46,6 +52,27 @@ export function assertProfileSensitiveSettingsPatch(
   if (ISOLATED_R2_SETTINGS.some((name) => Object.hasOwn(patch, name))) {
     throw new Error('R2 settings cannot be changed while an isolated development profile is active');
   }
+}
+
+/** Provider credentials, endpoints, model ids, and provider routing belong to
+ * the platform environment in hosted mode. Keep this check server-side even
+ * though the UI is read-only: browser requests are not a security boundary. */
+export function assertPlatformManagedSettingsPatch(
+  patch: Readonly<Record<string, unknown>>,
+  platformManaged = isPlatformManaged(),
+): void {
+  if (!platformManaged) return;
+  const providerPrefixes = [
+    'LLM_', 'IMAGE_', 'GEMINI_', 'WAVESPEED_', 'BYTEPLUS_', 'ELEVENLABS_',
+    'DOUBAO_', 'INWORLD_', 'FISHAUDIO_', 'SPEECHIFY_', 'SEEDANCE_', 'JIMENG_',
+    'KLING_', 'MINIMAX_', 'MUREKA_', 'ATLASCLOUD_', 'SONILO_',
+  ];
+  const protectedName = (name: string): boolean =>
+    name === PLATFORM_MODE_ENV
+    || providerPrefixes.some((prefix) => name.startsWith(prefix))
+    || /^PREFERRED_(IMAGE|VOICE|VIDEO|MUSIC|TRANSCRIPTION)_/.test(name);
+  const blocked = Object.keys(patch).find(protectedName);
+  if (blocked) throw new Error(`平台模式下 ${blocked} 由平台统一配置，用户无需填写或修改`);
 }
 
 // Dev-only settings endpoint bound to the Vite dev server (localhost). Key VALUES flow
@@ -86,12 +113,25 @@ function settingsBody(restartRequired = false) {
   const profile = runtimeProfile();
   const status = keyStatus();
   const configured = readDataDirPointer() ?? '';
+  const models = { ...status.models };
+  if (status.platformManaged) {
+    models.LLM_PROVIDER ||= 'openai';
+    models.PREFERRED_IMAGE_VENDOR ||= PLATFORM_DEFAULT_ROUTES.image;
+    models.PREFERRED_VOICE_VENDOR ||= PLATFORM_DEFAULT_ROUTES.voice;
+    models.PREFERRED_VIDEO_VENDOR ||= PLATFORM_DEFAULT_ROUTES.video;
+    for (const provider of PLATFORM_LLM_PROVIDERS) {
+      const names = `LLM_${provider.toUpperCase()}_`;
+      const defaults = PLATFORM_DEFAULT_LLM_CONFIG[provider];
+      models[`${names}BASE_URL`] ||= defaults.baseUrl;
+      models[`${names}MODEL`] ||= defaults.model;
+    }
+  }
   return {
     ...status,
     // The storage root is configuration, not a credential: echo it raw so the
     // settings field shows where projects actually live. It is not a keystore
     // key (the keystore lives inside the root), hence the explicit merge.
-    models: { ...status.models, [DATA_DIR_ENV]: configured },
+    models: { ...models, [DATA_DIR_ENV]: configured },
     mediaDir: uploadDir(),
     dataDir: profile.rootDir,
     ...(restartRequired ? { restartRequired: true } : {}),
@@ -157,12 +197,14 @@ export function settingsPlugin(): Plugin {
             const overrides = body.overrides && typeof body.overrides === 'object' && !Array.isArray(body.overrides)
               ? body.overrides as Record<string, unknown>
               : {};
+            assertPlatformManagedSettingsPatch(overrides);
             sendJson(res, 200, await runProbe(page, overrides));
             return;
           }
           if (req.method === 'POST') {
             const profile = runtimeProfile();
             const patch = await readBody(req);
+            assertPlatformManagedSettingsPatch(patch);
             assertProfileSensitiveSettingsPatch(patch, profile);
             // The storage root is not a keystore key (the keystore lives inside
             // it): handle and strip it before setKeys sees the patch.

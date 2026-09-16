@@ -2,6 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useT } from '../../i18n/locale';
 import { theme } from '../../theme';
 import { Icon, type IconName } from '../icons';
+import { VendorIcon } from '../settings/vendorIcons';
 import type { ChatMode } from './ChatComposer';
 import codexPng from '../../../assets/vendor-icons/codex-color.png';
 import copilotSvg from '../../../assets/vendor-icons/copilot.svg?raw';
@@ -11,7 +12,7 @@ export type ComposerPopover =
 
 interface ToolbarProps {
   mode: ChatMode;
-  activeModel?: { providerLabel: string; model: string; backend: 'api' | 'codex' | 'copilot' };
+  activeModel?: { providerLabel: string; provider: string; model: string; backend: 'api' | 'codex' | 'copilot' };
   contextLabel: string;
   contextTitle: string;
   contextNearLimit: boolean;
@@ -81,6 +82,9 @@ export function ComposerToolbar({
             // Static codebase asset, non-user input — inlined so it inherits currentColor.
             <span aria-hidden dangerouslySetInnerHTML={{ __html: copilotSvg }}
               style={{ width: 15, height: 15, fontSize: 15, flex: '0 0 auto', display: 'inline-flex' }} />
+          ) : activeModel?.backend === 'api'
+            && (activeModel.provider === 'openai' || activeModel.provider === 'deepseek') ? (
+            <VendorIcon vendor={activeModel.provider} size={15} />
           ) : (
             <Icon name="cloud" size={13} />
           )}

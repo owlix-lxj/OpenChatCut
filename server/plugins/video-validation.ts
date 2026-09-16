@@ -4,7 +4,7 @@ export type KlingVideoReferType = 'feature' | 'base';
 
 export interface VideoRequest {
   operationId?: string;
-  model?: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox';
+  model?: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'jimeng-avatar';
   prompt?: string;
   name?: string;
   durationSeconds?: number | string;
@@ -16,6 +16,7 @@ export interface VideoRequest {
   refImagePaths?: string[];
   refVideoPaths?: string[];
   refAudioPaths?: string[];
+  likenessConsent?: boolean;
   /** Versioned reference descriptors; server derives provider paths from these. */
   generationReferences?: unknown[];
   sourceRevisions?: string[];
@@ -34,7 +35,7 @@ export interface VideoRequest {
 }
 
 export interface ValidVideoRequest extends Omit<VideoRequest, 'model' | 'prompt' | 'durationSeconds' | 'ratio' | 'refImagePaths' | 'refVideoPaths' | 'refAudioPaths'> {
-  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox';
+  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'jimeng-avatar';
   prompt: string;
   durationSeconds: number;
   durationSpecified: boolean;
@@ -229,9 +230,29 @@ function validateOfox(input: ValidVideoRequest): ValidVideoRequest {
   return input;
 }
 
+function validateJimengAvatar(input: ValidVideoRequest): ValidVideoRequest {
+  if (input.likenessConsent !== true) throw new Error('jimeng-avatar requires explicit likeness consent before generating a photo digital human');
+  if (!input.firstFramePath) throw new Error('jimeng-avatar requires firstFrame (a project image asset)');
+  if (input.refAudioPaths.length !== 1) throw new Error('jimeng-avatar requires exactly one refAudios audio asset');
+  if (input.lastFramePath || input.refImagePaths.length || input.refVideoPaths.length) {
+    throw new Error('jimeng-avatar supports one firstFrame image and one refAudios audio asset only');
+  }
+  if (input.prompt || input.durationSpecified || input.ratio !== '16:9' || input.resolution || input.mode
+    || input.refVideoMode || input.promptOptimizer !== undefined || input.fastPretreatment !== undefined
+    || input.generateAudio !== undefined || input.seed !== undefined || input.cameraFixed !== undefined
+    || input.watermark !== undefined || input.returnLastFrame !== undefined
+    || input.executionExpiresAfter !== undefined || input.priority !== undefined || input.shotType || input.multiPrompts?.length) {
+    throw new Error('jimeng-avatar only accepts name, firstFrame, and one refAudios asset; duration follows the audio');
+  }
+  return input;
+}
+
 export function validateVideoRequest(input: VideoRequest): ValidVideoRequest {
-  if (input.model !== 'seedance2' && input.model !== 'kling' && input.model !== 'hailuo' && input.model !== 'byteplus' && input.model !== 'grok-imagine-video' && input.model !== 'ofox') {
-    throw new Error('model must be seedance2, kling, hailuo, byteplus, grok-imagine-video, or ofox');
+  if (input.model !== 'seedance2' && input.model !== 'kling' && input.model !== 'hailuo' && input.model !== 'byteplus' && input.model !== 'grok-imagine-video' && input.model !== 'ofox' && input.model !== 'jimeng-avatar') {
+    throw new Error('model must be seedance2, kling, hailuo, byteplus, grok-imagine-video, ofox, or jimeng-avatar');
+  }
+  if (input.model !== 'jimeng-avatar' && input.likenessConsent !== undefined) {
+    throw new Error('likenessConsent is supported by jimeng-avatar only');
   }
   if (input.model === 'hailuo' && input.ratio !== undefined) throw new Error('hailuo does not accept ratio; framing follows the first frame when present');
   const normalized = common(input, input.model);
@@ -239,5 +260,6 @@ export function validateVideoRequest(input: VideoRequest): ValidVideoRequest {
   if (normalized.model === 'kling') return validateKling(normalized);
   if (normalized.model === 'grok-imagine-video') return validateGrok(normalized);
   if (normalized.model === 'ofox') return validateOfox(normalized);
+  if (normalized.model === 'jimeng-avatar') return validateJimengAvatar(normalized);
   return validateSeedance(normalized);
 }

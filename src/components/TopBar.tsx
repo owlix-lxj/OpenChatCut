@@ -1,64 +1,28 @@
-import { lazy, Suspense, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { theme } from '../theme';
 import { Icon } from './icons';
 import { ExportHistory } from './ExportHistory';
-import { GenerationActivity } from './GenerationActivity';
 import { SkinPicker } from './settings/SkinPicker';
-import { loadMcpGuideDialog } from './settings/mcpGuideLoader';
-import { ALL_LOCALES, getLocale, setLocale, useT } from '../i18n/locale';
-import { invokeAction, bindAction } from '../shortcuts/actionRegistry';
+import { useT } from '../i18n/locale';
+import { invokeAction } from '../shortcuts/actionRegistry';
 import { DesktopWindowControls } from './DesktopWindowControls';
 import { TopBarIconButton } from './TopBarIconButton';
 
-// Lazy, like the dashboard's copy of this dialog. A static import here put the
-// whole MCP guide into the editor's eager chunk and made every lazy() built on
-// loadMcpGuideDialog ineffective, dashboard included — both top bars have to go
-// through the thunk for either to be split.
-const McpGuideDialog = lazy(() => loadMcpGuideDialog().then((m) => ({ default: m.McpGuideDialog })));
-
-// Language switching: The text pill displays the current language; clicking
-// cycles through the supported locales. First run defaults to the
-// system language (or English) — see i18n/locale.ts.
-export function LocaleToggle() {
-  const t = useT();
-  const locale = getLocale();
-  const next = ALL_LOCALES[(ALL_LOCALES.indexOf(locale) + 1) % ALL_LOCALES.length]!;
-  return (
-    <button
-      className="cc-tip cc-tip-r"
-      data-tip={t('切换界面语言')}
-      aria-label={t('切换界面语言')}
-      onClick={() => setLocale(next)}
-      style={{ minWidth: 30, height: 22, background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 4, cursor: 'pointer', padding: '0 5px', fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: theme.textDim, display: 'grid', placeItems: 'center' }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.panelAlt; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = theme.textDim; e.currentTarget.style.background = 'none'; }}>
-      {locale === 'zh' ? '中' : locale.toUpperCase()}
-    </button>
-  );
-}
-
 interface TopBarProps {
-  projectId: string;
   projectName: string;
   canUndo: boolean;
   canRedo: boolean;
   exporting?: boolean;
   exportJobCount?: number;
-  onResumeGeneration?: () => Promise<void>;
   onHome?: () => void;
   onRename?: (name: string) => void;
 }
 
-export function TopBar({ projectId, projectName, canUndo, canRedo, exporting, exportJobCount = 0, onHome, onRename, onResumeGeneration }: TopBarProps) {
+export function TopBar({ projectName, canUndo, canRedo, exporting, exportJobCount = 0, onHome, onRename }: TopBarProps) {
   const t = useT();
   const isMacDesktop = window.openChatCutDesktop?.platform === 'darwin';
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(projectName);
-  const [mcpOpen, setMcpOpen] = useState(false);
-  // The settings dialog (and anything else) can summon the MCP guide through the
-  // action registry: the Anthropic pane names this panel as the way in for
-  // Claude Code subscribers, so it has to be able to actually open it.
-  useEffect(() => bindAction('open-mcp-guide', () => setMcpOpen(true)), []);
   const commit = () => { setEditing(false); if (onRename && draft.trim() && draft.trim() !== projectName) onRename(draft.trim()); };
 
   return (
@@ -86,19 +50,15 @@ export function TopBar({ projectId, projectName, canUndo, canRedo, exporting, ex
 
       <div className="cc-topbar-actions">
 
-      {/* right: undo · redo · shortcuts · history · layout · export · avatar */}
+      {/* right: undo · redo · shortcuts · history · export · avatar */}
       <TopBarIconButton icon="undo" label={t('撤销')} onClick={() => invokeAction('undo', undefined, 'toolbar')} disabled={!canUndo} />
       <TopBarIconButton icon="redo" label={t('重做')} onClick={() => invokeAction('redo', undefined, 'toolbar')} disabled={!canRedo} />
       <TopBarIconButton icon="keyboard" label={t('编辑快捷键')} onClick={() => invokeAction('keyboard-shortcuts', undefined, 'toolbar')} />
-      <TopBarIconButton icon="plug" label={t('外部 Agent 接入 (MCP)')} onClick={() => setMcpOpen(true)} />
-      <span id="cc-agent-change-log-slot" style={{ display: 'contents' }} />
       <TopBarIconButton icon="palette" label={t('设计风格(品牌)')} onClick={() => invokeAction('open-design', undefined, 'toolbar')} />
       <SkinPicker />
-      <GenerationActivity projectId={projectId} onResume={onResumeGeneration} />
       <TopBarIconButton icon="history" label={t('历史版本')} onClick={() => invokeAction('open-history', undefined, 'toolbar')} />
       {/* self-contained: trigger + popover, global export history, zero props */}
       <ExportHistory />
-      <LocaleToggle />
       <TopBarIconButton icon="layoutPanel" label={t('切换面板布局')} onClick={() => invokeAction('toggle-layout', undefined, 'toolbar')} />
       <button onClick={() => invokeAction('open-export', undefined, 'toolbar')}
         className="cc-tip cc-tip-r"
@@ -109,11 +69,6 @@ export function TopBar({ projectId, projectName, canUndo, canRedo, exporting, ex
       </button>
       <div title={t('账户')} style={{ width: 20, height: 20, borderRadius: '50%', marginLeft: 2, background: 'conic-gradient(from 210deg, #6d6cff, #ff5f9e, #ffb35f, #6d6cff)', flexShrink: 0 }} />
       </div>
-      {/* No fallback: a dialog that is still loading shows nothing, exactly as it
-          did before it was opened — the same treatment the other overlays get. */}
-      <Suspense fallback={null}>
-        {mcpOpen && <McpGuideDialog onClose={() => setMcpOpen(false)} />}
-      </Suspense>
     </header>
   );
 }

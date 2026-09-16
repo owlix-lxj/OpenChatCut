@@ -43,6 +43,7 @@ export function ChatComposer(props: ChatComposerProps) {
     selectedRefs = [], onRemoveRef, onPasteFiles, onDropFiles, pasting, pendingAttachmentCount = 0,
     pasteError, onDismissPasteError,
     onDropEditorItem,
+    onOpenDigitalHuman,
     taRef, placeholder,
   } = props;
   const [editorDragOver, setEditorDragOver] = useState(false);
@@ -217,6 +218,7 @@ export function ChatComposer(props: ChatComposerProps) {
         .map((r) => ({ key: r.id, icon: REF_ICON[r.kind], label: r.name, action: () => insert(r) }));
     }
     return [
+      ...(onOpenDigitalHuman ? [{ key: 'digital-human', icon: 'bookOpen' as IconName, label: t('智能制课'), action: () => { closePop(); onOpenDigitalHuman(); } }] : []),
       { key: 'assets', icon: 'filePlay', label: t('引用媒体池素材'), sub: `${assets.length}`, action: go('assets') },
       { key: 'timeline', icon: 'film', label: t('时间线'), sub: `${tracks.length}`, action: go('timeline') },
       { key: 'templates', icon: 'sparkles', label: t('引用模板库'), action: go('templates') },

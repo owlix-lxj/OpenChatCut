@@ -3,6 +3,12 @@
 // __CONFIGURED_CAPS__ — BOOLEANS ONLY, never any key value reaches the browser.
 // The system prompt reads this so the agent plans around what's available instead
 // of promising e.g. raw graph and only discovering "not configured" mid-execution.
+import {
+  PLATFORM_DEFAULT_ROUTES,
+  PLATFORM_IMAGE_VENDOR,
+  PLATFORM_VIDEO_VENDOR,
+  PLATFORM_VOICE_PROVIDERS,
+} from '../../shared/platform-config';
 
 export type CapabilityKey =
   | 'image' | 'voice' | 'video' | 'music' | 'sound'
@@ -22,6 +28,9 @@ const ALL_OFF: Record<CapabilityKey, boolean> = {
 // case safe (a bare reference would ReferenceError outside Vite).
 export const CONFIGURED_CAPS: Record<CapabilityKey, boolean> =
   typeof __CONFIGURED_CAPS__ !== 'undefined' ? (__CONFIGURED_CAPS__ as Record<CapabilityKey, boolean>) : ALL_OFF;
+
+const CONFIGURED_PLATFORM_MANAGED =
+  typeof __PLATFORM_MANAGED__ !== 'undefined' ? __PLATFORM_MANAGED__ === true : false;
 
 // Live capability snapshot from the server (GET /api/keys → caps), applied at app load and
 // after the settings UI saves a key — so the agent perceives a runtime key change on its next
@@ -44,6 +53,14 @@ export function applyLiveKeyStatus(keys: Record<string, { configured: boolean }>
   liveKeys = keys;
 }
 
+let livePlatformManaged: boolean | null = null;
+export function applyLivePlatformManaged(platformManaged: boolean): void {
+  livePlatformManaged = platformManaged;
+}
+function platformManaged(): boolean {
+  return livePlatformManaged ?? CONFIGURED_PLATFORM_MANAGED;
+}
+
 // Non-secret model/routing values from the server (GET /api/keys → models): the
 // per-vendor model picks plus PREFERRED_*_VENDOR — the user's default vendor per
 // capability ('' = not chosen → agent must ASK in chat before first use).
@@ -58,7 +75,7 @@ export function applyLiveModels(models: Record<string, string>): void {
 interface ProviderRow { label: string; arg: string; argKey: 'model' | 'provider'; need: string[][] }
 const CAP_PROVIDERS: Partial<Record<CapabilityKey, ProviderRow[]>> = {
   image: [
-    { label: 'gpt-image', arg: 'gpt-image-2', argKey: 'model', need: [['IMAGE_API_KEY'], ['OPENAI_API_KEY']] },
+    { label: 'gpt-image', arg: 'gpt-image-2', argKey: 'model', need: [['IMAGE_API_KEY'], ['OPENAI_API_KEY'], ['LLM_OPENAI_API_KEY']] },
     { label: 'Nano Banana', arg: 'nano-banana', argKey: 'model', need: [['GEMINI_API_KEY']] },
     { label: 'MiniMax', arg: 'image-01', argKey: 'model', need: [['MINIMAX_API_KEY']] },
     { label: 'WaveSpeed', arg: 'wavespeed', argKey: 'model', need: [['WAVESPEED_API_KEY']] },
@@ -76,10 +93,12 @@ const CAP_PROVIDERS: Partial<Record<CapabilityKey, ProviderRow[]>> = {
     { label: 'Gemini', arg: 'gemini', argKey: 'provider', need: [['GEMINI_API_KEY']] },
     { label: 'Mistral Voxtral', arg: 'mistral', argKey: 'provider', need: [['LLM_MISTRAL_API_KEY']] },
     { label: 'Cartesia', arg: 'cartesia', argKey: 'provider', need: [['CARTESIA_API_KEY']] },
+    { label: 'Alibaba Cloud Qwen', arg: 'qwen', argKey: 'provider', need: [['LLM_QWEN_API_KEY']] },
   ],
   video: [
     { label: 'OFox', arg: 'ofox', argKey: 'model', need: [['LLM_OFOX_API_KEY']] },
     { label: 'Seedance', arg: 'seedance2', argKey: 'model', need: [['SEEDANCE_API_KEY']] },
+    { label: '即梦数字人', arg: 'jimeng-avatar', argKey: 'model', need: [['JIMENG_ACCESS_KEY', 'JIMENG_SECRET_KEY']] },
     { label: 'Kling', arg: 'kling', argKey: 'model', need: [['KLING_API_KEY']] },
     { label: 'Hailuo', arg: 'hailuo', argKey: 'model', need: [['MINIMAX_API_KEY']] },
     { label: 'xAI Grok', arg: 'grok-imagine-video', argKey: 'model', need: [['LLM_XAI_OAUTH_API_KEY'], ['LLM_XAI_API_KEY']] },
@@ -110,6 +129,7 @@ const CAP_PROVIDERS: Partial<Record<CapabilityKey, ProviderRow[]>> = {
     { label: 'Groq', arg: 'groq', argKey: 'provider', need: [['GROQ_API_KEY']] },
     { label: 'ElevenLabs Scribe', arg: 'elevenlabs', argKey: 'provider', need: [['ELEVENLABS_API_KEY']] },
     { label: 'Cartesia', arg: 'cartesia', argKey: 'provider', need: [['CARTESIA_API_KEY']] },
+    { label: 'Alibaba Cloud Qwen', arg: 'qwen', argKey: 'provider', need: [['LLM_QWEN_API_KEY']] },
   ],
 };
 
@@ -131,10 +151,25 @@ function providerSuffix(cap: CapabilityKey, mode: ApprovalMode): string {
   const rows = CAP_PROVIDERS[cap];
   if (!rows || !liveKeys) return '';
   const has = (n: string): boolean => Boolean(liveKeys?.[n]?.configured);
-  const on = rows.filter((r) => r.need.some((group) => group.every(has)));
+  const on = rows.filter((r) => {
+    if (platformManaged()) {
+      const allowed = cap === 'image'
+        ? r.arg === PLATFORM_IMAGE_VENDOR
+        : cap === 'voice'
+          ? (PLATFORM_VOICE_PROVIDERS as readonly string[]).includes(r.arg)
+          : cap === 'video'
+            ? r.arg === PLATFORM_VIDEO_VENDOR
+            : cap === 'transcription' ? false : true;
+      if (!allowed) return false;
+    }
+    return r.need.some((group) => group.every(has));
+  });
   if (on.length === 0) return '';
   const prefKey = PREFERRED_KEY[cap];
-  const savedPref = prefKey ? (liveModels?.[prefKey] ?? '').trim() : '';
+  const platformDefault = platformManaged() && (cap === 'image' || cap === 'voice' || cap === 'video')
+    ? PLATFORM_DEFAULT_ROUTES[cap]
+    : '';
+  const savedPref = prefKey ? (liveModels?.[prefKey] ?? platformDefault).trim() : '';
   const pref = savedPref || (cap === 'transcription' ? 'assemblyai' : '');
   const chosen = pref ? on.find((r) => r.arg === pref) : undefined;
   if (chosen) {

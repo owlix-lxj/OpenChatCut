@@ -97,7 +97,7 @@ const minimalVoice = (provider: MinimalVoiceProvider) => (args: GenerateArgs): S
   ...voiceBase(args, provider), modelId: str(args.modelId),
 });
 
-type GenericVoiceProvider = 'openai' | 'gemini' | 'mistral' | 'cartesia';
+type GenericVoiceProvider = 'openai' | 'gemini' | 'mistral' | 'cartesia' | 'qwen';
 function genericVoice(args: GenerateArgs, provider: GenericVoiceProvider): SubmitVoiceArgs {
   const shared = {
     ...voiceBase(args, provider),
@@ -108,6 +108,9 @@ function genericVoice(args: GenerateArgs, provider: GenericVoiceProvider): Submi
     return { ...shared, speed: num(args.speed), instructions: str(args.instructions) };
   }
   if (provider === 'gemini') return { ...shared, instructions: str(args.instructions) };
+  if (provider === 'qwen') {
+    return { ...shared, speed: num(args.speed), languageCode: str(args.languageCode), instructions: str(args.instructions) };
+  }
   if (provider === 'cartesia') {
     return { ...shared, speed: num(args.speed), languageCode: str(args.languageCode) };
   }
@@ -125,6 +128,7 @@ const VOICE_STRATEGIES = {
   gemini: (args) => genericVoice(args, 'gemini'),
   mistral: (args) => genericVoice(args, 'mistral'),
   cartesia: (args) => genericVoice(args, 'cartesia'),
+  qwen: (args) => genericVoice(args, 'qwen'),
 } satisfies Record<VoiceProvider, (args: GenerateArgs) => SubmitVoiceArgs>;
 
 export function buildSubmitVoiceArgs(args: GenerateArgs): SubmitVoiceArgs {
@@ -218,10 +222,14 @@ const hailuoVideo = (args: GenerateArgs): SubmitVideoArgs => ({
 });
 // xAI Grok Imagine Video: text-to-video only — the base fields are the whole surface.
 const grokVideo = (args: GenerateArgs): SubmitVideoArgs => videoBase(args, 'grok-imagine-video');
+const jimengAvatarVideo = (args: GenerateArgs): SubmitVideoArgs => ({
+  model: 'jimeng-avatar', name: str(args.name), firstFrame: str(args.firstFrame), refAudios: list(args.refAudios),
+  likenessConsent: bool(args.likenessConsent),
+});
 
-const VIDEO_STRATEGIES = { seedance2: seedanceVideo, kling: klingVideo, hailuo: hailuoVideo, byteplus: byteplusVideo, 'grok-imagine-video': grokVideo, ofox: ofoxVideo } as const;
+const VIDEO_STRATEGIES = { seedance2: seedanceVideo, kling: klingVideo, hailuo: hailuoVideo, byteplus: byteplusVideo, 'grok-imagine-video': grokVideo, ofox: ofoxVideo, 'jimeng-avatar': jimengAvatarVideo } as const;
 export function buildSubmitVideoArgs(args: GenerateArgs): SubmitVideoArgs {
-  const model = args.model === 'kling' || args.model === 'hailuo' || args.model === 'byteplus' || args.model === 'grok-imagine-video' || args.model === 'ofox' ? args.model : 'seedance2';
+  const model = args.model === 'kling' || args.model === 'hailuo' || args.model === 'byteplus' || args.model === 'grok-imagine-video' || args.model === 'ofox' || args.model === 'jimeng-avatar' ? args.model : 'seedance2';
   return VIDEO_STRATEGIES[model](args);
 }
 

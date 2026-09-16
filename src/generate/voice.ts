@@ -11,7 +11,8 @@ export type VoiceProvider =
   | 'openai'
   | 'gemini'
   | 'mistral'
-  | 'cartesia';
+  | 'cartesia'
+  | 'qwen';
 
 export interface SubmitVoiceArgs {
   provider: VoiceProvider;

@@ -15,6 +15,7 @@ import {
   type LlmProvider,
   type OpenAiApiMode,
 } from '../../shared/llm-providers';
+import { internalLlmAuthHeaders } from './internal-llm-auth.ts';
 
 function proxyOptions(provider: LlmProvider, origin: string): {
   baseURL: string;
@@ -28,6 +29,7 @@ function proxyOptions(provider: LlmProvider, origin: string): {
       'x-openchatcut-provider': provider,
       origin,
       'sec-fetch-site': 'same-origin',
+      ...internalLlmAuthHeaders(),
     },
   };
 }

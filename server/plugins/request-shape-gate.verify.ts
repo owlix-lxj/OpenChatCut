@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { IncomingMessage } from 'node:http';
 import { requestShapeAllowed } from './request-shape-gate';
 import { externalMcpToken } from '../editor-auth';
+import { internalLlmAuthHeaders } from '../agent-runs/internal-llm-auth.ts';
 
 function req(overrides: Record<string, unknown> = {}): IncomingMessage {
   return {
@@ -36,6 +37,20 @@ assert.equal(requestShapeAllowed(foreignOrigin), false, 'foreign origin blocked'
 
 const nonLoopback = req({ socket: { remoteAddress: '10.0.0.5' } });
 assert.equal(requestShapeAllowed(nonLoopback), false, 'non-loopback socket blocked');
+
+const internalLlm = req({
+  url: '/llm/chat/completions',
+  headers: {
+    host: '127.0.0.1:5199',
+    ...internalLlmAuthHeaders(),
+  },
+});
+assert.equal(requestShapeAllowed(internalLlm), true, 'authenticated server Agent loopback reaches /llm');
+const forgedInternalLlm = req({
+  url: '/llm/chat/completions',
+  headers: { host: '127.0.0.1:5199', 'x-openchatcut-internal-llm': 'forged' },
+});
+assert.equal(requestShapeAllowed(forgedInternalLlm), false, 'forged internal /llm requests stay blocked');
 
 const bearer = req({ url: '/api/external-mcp/mcp', headers: { authorization: 'Bearer abc' } });
 assert.equal(requestShapeAllowed(bearer), false, 'an arbitrary bearer token does not bypass the origin gate');

@@ -74,7 +74,7 @@ async function readAudio(req: IncomingMessage): Promise<Buffer> {
 function requestProvider(url: URL): CloudTranscriptionProvider {
   const provider = (url.searchParams.get('provider') ?? '').trim();
   if (!isCloudTranscriptionProvider(provider)) {
-    throw new TranscriptionRequestError(400, 'provider must be openai, deepgram, groq, elevenlabs, or cartesia');
+    throw new TranscriptionRequestError(400, 'provider must be openai, mistral, deepgram, groq, elevenlabs, cartesia, or qwen');
   }
   return provider;
 }

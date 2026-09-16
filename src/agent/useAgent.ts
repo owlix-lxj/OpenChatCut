@@ -3,6 +3,7 @@ import type { DisplayMessage, LiveTool } from './agent-session';
 import type { AgentChangeSession } from './changeLog';
 import type { Proposal } from './proposal';
 import type { AgentSend } from './useAgentRun';
+import type { ChatConversationSummary } from '../persist/chatConversations';
 
 /**
  * The controller surface exposed to the chat panel. Server-side execution is
@@ -18,10 +19,14 @@ export interface AgentController {
   readonly proposalStale: boolean;
   readonly liveTool: LiveTool | null;
   readonly changeLog: AgentChangeSession[];
+  readonly activeConversationId: string | null;
+  readonly conversations: ChatConversationSummary[];
   readonly send: AgentSend;
   readonly stop: () => void;
   readonly enhance: (prompt: string) => Promise<string>;
   readonly clearHistory: () => void;
+  readonly newConversation: () => void;
+  readonly switchConversation: (id: string) => void;
   readonly applyProposal: (selected: Set<number>) => void;
   readonly forceApplyProposal: (selected: Set<number>) => void;
   readonly reProposeStale: () => void;

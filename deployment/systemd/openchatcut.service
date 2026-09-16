@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenChatCut Platform Editor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openchatcut
+Group=openchatcut
+WorkingDirectory=/opt/openchatcut/current
+Environment=NODE_ENV=production
+Environment=HOME=/var/lib/openchatcut
+EnvironmentFile=/etc/openchatcut/openchatcut.env
+ExecStart=/usr/bin/node /opt/openchatcut/current/server-dist/standalone.mjs
+Restart=on-failure
+RestartSec=5
+StateDirectory=openchatcut
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openchatcut
+
+[Install]
+WantedBy=multi-user.target

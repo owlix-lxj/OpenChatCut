@@ -98,4 +98,17 @@ assert.throws(
   'byteplus lastFrame cannot combine with reference arrays, same as seedance2',
 );
 
+preflightGenerationReferences('jimeng-avatar', [
+  { kind: 'asset-master', role: 'first-frame', assetId: 'image-1', path: '/media/uploads/presenter.jpg' },
+  { kind: 'asset-master', role: 'reference-audio', assetId: 'audio-1', path: '/media/uploads/script.m4a' },
+]);
+assert.throws(
+  () => preflightGenerationReferences('jimeng-avatar', [
+    { kind: 'asset-master', role: 'first-frame', assetId: 'image-1', path: '/media/uploads/presenter.jpg' },
+  ]),
+  (error: unknown) => error instanceof GenerationReferencePreflightError
+    && error.issues.some((issue) => issue.code === 'jimeng_audio_required'),
+  'Jimeng requires exactly one audio reference before fetch',
+);
+
 console.log('video generation reference checks passed');

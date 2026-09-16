@@ -41,6 +41,12 @@ import {
 import { DELETED_PROJECTS_KV_KEY } from '../storage/sqlite-migration.ts';
 import { indexStoreKey, removeStoreKey } from '../storage/fulltext-search.ts';
 import {
+  logicalProjectStoreKey,
+  physicalProjectStoreKey,
+  platformStorageScoped,
+  withoutPlatformStorageScope,
+} from '../platform-storage-scope.ts';
+import {
   atomicWriteFile,
   atomicWriteJson,
   durableMkdir,
@@ -92,14 +98,18 @@ async function readLegacyStore(): Promise<{ exists: boolean; store: StoreFile }>
   }
 }
 
-const entryPath = (key: string) => key === 'projects'
-  ? INDEX_PATH
-  : join(STORE_DIR, `${encodeURIComponent(key)}.json`);
+const entryPath = (key: string) => {
+  const physical = physicalProjectStoreKey(key);
+  return physical === 'projects'
+    ? INDEX_PATH
+    : join(STORE_DIR, `${encodeURIComponent(physical)}.json`);
+};
 
 async function writeStoredEntry(key: string, value: unknown): Promise<void> {
   if (sqliteStoreEnabled()) {
-    await sqliteWriteEntry(key, value);
-    indexStoreKey(key, value);
+    const physical = physicalProjectStoreKey(key);
+    await sqliteWriteEntry(physical, value);
+    indexStoreKey(physical, value);
     return;
   }
   await atomicWriteJson(entryPath(key), value);
@@ -137,7 +147,7 @@ async function quarantineEntryFile(file: string, key: string): Promise<Quarantin
 
 async function readDeletedProjects(): Promise<Record<string, number>> {
   if (sqliteStoreEnabled()) {
-    const row = await sqliteReadEntry(DELETED_PROJECTS_KV_KEY);
+    const row = await sqliteReadEntry(physicalProjectStoreKey(DELETED_PROJECTS_KV_KEY));
     if (!row.found) return {};
     const parsed = row.value;
     if (!isProjectStoreRecord(parsed)) throw new Error('invalid deleted project registry');
@@ -148,7 +158,8 @@ async function readDeletedProjects(): Promise<Record<string, number>> {
     return Object.fromEntries(entries) as Record<string, number>;
   }
   try {
-    const parsed: unknown = JSON.parse(await readFile(DELETED_PROJECTS_PATH, 'utf8'));
+    const path = platformStorageScoped() ? entryPath(DELETED_PROJECTS_KV_KEY) : DELETED_PROJECTS_PATH;
+    const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
     if (!isProjectStoreRecord(parsed)) throw new Error('invalid deleted project registry');
     const entries = Object.entries(parsed);
     if (!entries.every(([id, deletedAt]) => VALID_PROJECT_ID.test(id) && typeof deletedAt === 'number')) {
@@ -163,15 +174,17 @@ async function readDeletedProjects(): Promise<Record<string, number>> {
 
 async function writeDeletedProjects(projects: Record<string, number>): Promise<void> {
   if (sqliteStoreEnabled()) {
-    await sqliteWriteEntry(DELETED_PROJECTS_KV_KEY, projects);
+    await sqliteWriteEntry(physicalProjectStoreKey(DELETED_PROJECTS_KV_KEY), projects);
     return;
   }
-  await atomicWriteJson(DELETED_PROJECTS_PATH, projects);
+  await atomicWriteJson(platformStorageScoped() ? entryPath(DELETED_PROJECTS_KV_KEY) : DELETED_PROJECTS_PATH, projects);
 }
 
 async function writeEntries(entries: Record<string, unknown>): Promise<void> {
   if (sqliteStoreEnabled()) {
-    await sqliteWriteAll(entries);
+    await sqliteWriteAll(Object.fromEntries(
+      Object.entries(entries).map(([key, value]) => [physicalProjectStoreKey(key), value]),
+    ));
     return;
   }
   await durableMkdir(STORE_DIR, true);
@@ -184,7 +197,13 @@ async function writeEntries(entries: Record<string, unknown>): Promise<void> {
 }
 
 async function readDirectoryEntries(): Promise<Record<string, unknown>> {
-  if (sqliteStoreEnabled()) return sqliteReadAll();
+  if (sqliteStoreEnabled()) {
+    const stored = await sqliteReadAll();
+    return Object.fromEntries(Object.entries(stored).flatMap(([key, value]) => {
+      const logical = logicalProjectStoreKey(key);
+      return logical ? [[logical, value] as const] : [];
+    }));
+  }
   const entries: Record<string, unknown> = {};
   for (const file of await readdir(STORE_DIR)) {
     if (!file.endsWith('.json')) continue;
@@ -195,15 +214,17 @@ async function readDirectoryEntries(): Promise<Record<string, unknown>> {
       await quarantineUnknownEntryFile(file);
       continue;
     }
-    if (!isProjectStoreKey(key)) {
+    const logical = logicalProjectStoreKey(key);
+    if (!logical) continue;
+    if (!isProjectStoreKey(logical)) {
       await quarantineUnknownEntryFile(file);
       continue;
     }
     const raw = await readFile(join(STORE_DIR, file), 'utf8');
     try {
-      entries[key] = JSON.parse(raw);
+      entries[logical] = JSON.parse(raw);
     } catch {
-      entries[key] = await quarantineEntryFile(file, key);
+      entries[logical] = await quarantineEntryFile(file, logical);
     }
   }
   return entries;
@@ -235,7 +256,7 @@ async function ensureStoreReady(): Promise<void> {
   // database self-creates its directory and schema (phase 1 adds import).
   if (sqliteStoreEnabled()) return;
   if (await readyExists()) return;
-  legacyStoreReady ??= migrateLegacyStore();
+  legacyStoreReady ??= withoutPlatformStorageScope(migrateLegacyStore);
   try {
     await legacyStoreReady;
   } catch (error) {
@@ -268,7 +289,7 @@ export async function mergeStoredEntries(incoming: Record<string, unknown>): Pro
     };
     await writeEntries(next.entries);
     for (const [key, value] of Object.entries(next.entries)) {
-      if (key.startsWith('chat:') || key.startsWith('project:')) indexStoreKey(key, value);
+      if (key.startsWith('chat:') || key.startsWith('project:')) indexStoreKey(physicalProjectStoreKey(key), value);
     }
     return next;
   });
@@ -300,7 +321,7 @@ export async function setStoredEntry(key: string, value: unknown): Promise<void>
           // SQLite mode: documents live in the kv table, not the JSON dir.
           const projectKey = `project:${item.id}`;
           const present = sqliteStoreEnabled()
-            ? (await sqliteReadEntry(projectKey)).found
+            ? (await sqliteReadEntry(physicalProjectStoreKey(projectKey))).found
             : await access(entryPath(projectKey)).then(() => true);
           if (present) existing.push(item);
         } catch {
@@ -323,7 +344,15 @@ export async function setStoredEntry(key: string, value: unknown): Promise<void>
 
 async function purgeProjectEntryFilesDurably(projectId: string): Promise<void> {
   if (sqliteStoreEnabled()) {
-    await sqliteDeleteProjectEntries(projectId);
+    if (!platformStorageScoped()) {
+      await sqliteDeleteProjectEntries(projectId);
+      return;
+    }
+    const stored = await sqliteReadAll();
+    for (const key of Object.keys(stored)) {
+      const logical = logicalProjectStoreKey(key);
+      if (logical && projectIdFromProjectStoreKey(logical) === projectId) await sqliteDeleteEntry(key);
+    }
     return;
   }
   for (const file of await readdir(STORE_DIR)) {
@@ -335,11 +364,13 @@ async function purgeProjectEntryFilesDurably(projectId: string): Promise<void> {
       await quarantineUnknownEntryFile(file);
       continue;
     }
-    if (!isProjectStoreKey(key)) {
+    const logical = logicalProjectStoreKey(key);
+    if (!logical) continue;
+    if (!isProjectStoreKey(logical)) {
       await quarantineUnknownEntryFile(file);
       continue;
     }
-    if (projectIdFromProjectStoreKey(key) === projectId) {
+    if (projectIdFromProjectStoreKey(logical) === projectId) {
       await durableRemove(join(STORE_DIR, file));
     }
   }
@@ -368,11 +399,11 @@ export async function deleteStoredEntry(key: string): Promise<void> {
     if (projectId) {
       if (!VALID_PROJECT_ID.test(projectId)) throw new Error('invalid project id');
       await purgeProjectLocked(projectId);
-      removeStoreKey(`chat:${projectId}`);
-      removeStoreKey(`project:${projectId}`);
+      removeStoreKey(physicalProjectStoreKey(`chat:${projectId}`));
+      removeStoreKey(physicalProjectStoreKey(`project:${projectId}`));
     } else if (sqliteStoreEnabled()) {
-      await sqliteDeleteEntry(key);
-      removeStoreKey(key);
+      await sqliteDeleteEntry(physicalProjectStoreKey(key));
+      removeStoreKey(physicalProjectStoreKey(key));
     } else {
       await durableRemove(entryPath(key));
     }
@@ -383,6 +414,7 @@ const { createLockedProjectStore, readEntryFile } = createProjectStoreEntryAdapt
   entryPath,
   quarantineEntryFile,
   writeStoredEntry,
+  storageKey: physicalProjectStoreKey,
 });
 
 export async function getStoredEntry(key: string): Promise<StoredEntryValue> {
@@ -435,7 +467,7 @@ export async function updateExportRecoveryLease(
   input: ExportRecoveryLeaseInput,
 ): Promise<ProjectStoreMutationResponse> {
   await ensureStoreReady();
-  if (!sqliteStoreEnabled()) return updateLegacyExportRecovery(input);
+  if (!sqliteStoreEnabled() || platformStorageScoped()) return updateLegacyExportRecovery(input);
   return sqliteImmediateTransaction((store) => (
     executeImmediateExportRecoveryMutation(store, input)
   ));

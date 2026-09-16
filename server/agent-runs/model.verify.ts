@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { generateText } from 'ai';
 import { createServerLanguageModel } from './model';
+import { internalLlmRequestAuthorized } from './internal-llm-auth.ts';
 
 let originHeader: string | undefined;
 let fetchSiteHeader: string | undefined;
+let internallyAuthorized = false;
 const server = createServer((req, res) => {
   originHeader = req.headers.origin;
   fetchSiteHeader = req.headers['sec-fetch-site'];
+  internallyAuthorized = internalLlmRequestAuthorized(req);
   res.writeHead(400, { 'content-type': 'application/json' });
   res.end('{"error":{"message":"captured"}}');
 });
@@ -28,6 +31,7 @@ try {
   }));
   assert.equal(originHeader, origin);
   assert.equal(fetchSiteHeader, 'same-origin');
+  assert.equal(internallyAuthorized, true, 'server Agent authenticates its loopback /llm hop');
 } finally {
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }

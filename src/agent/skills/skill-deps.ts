@@ -46,7 +46,7 @@ const RULES: Rule[] = [
     service: 'voice / TTS (配音/语音合成)',
     keywords: [
       'elevenlabs', 'doubao tts', 'minimax tts', 'inworld tts', 'fish audio tts',
-      'speechify tts', 'openai tts', 'gemini tts', 'mistral tts', 'cartesia tts',
+      'speechify tts', 'openai tts', 'gemini tts', 'mistral tts', 'cartesia tts', 'qwen tts', 'qwen-audio', '百炼',
       'text-to-speech', 'tts ', '配音', '语音合成', 'voiceover', 'voice clone',
       '语音克隆', 'indextts', 'narration voice',
     ],
@@ -66,7 +66,7 @@ const RULES: Rule[] = [
     service: 'transcription via the configured provider (语音转写)',
     keywords: [
       'assemblyai', 'whisper', 'openai transcription', 'deepgram', 'groq transcription',
-      'elevenlabs scribe', 'cartesia ink', 'transcription', '转写',
+      'elevenlabs scribe', 'cartesia ink', 'qwen asr', 'qwen-audio', 'transcription', '转写',
     ],
   },
   {

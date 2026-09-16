@@ -6,7 +6,7 @@ import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
-import { putUploadFile, r2Config } from '../r2.ts';
+import { putUploadFile, r2Config, uploadObjectKey } from '../r2.ts';
 import { uploadDir } from '../media-dir.ts';
 import { maxUploadBytes } from './upload.ts';
 import { assembleHashedParts } from './upload-multipart-assembly.ts';
@@ -445,7 +445,7 @@ export function uploadMultipartPlugin(): Plugin {
             path: `/media/uploads/${fname}`,
             bytes,
             contentHash,
-            fileKey: `uploads/${fname}`,
+            fileKey: uploadObjectKey(fname),
             assetId: meta.assetId,
             cloud,
           });

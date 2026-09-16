@@ -7,7 +7,7 @@ import { buildServerRunPrompt, SERVER_RUN_AI_TIMEOUT } from './context.ts';
 import { resolveServerRunToolCatalog } from './tool-policy.ts';
 import { serverToolCatalogForGeneration } from './tool-catalog-generation.ts';
 import { serverProviderOptions } from './model.ts';
-import { validateCreateInput } from './request.ts';
+import { requestOrigin, validateCreateInput } from './request.ts';
 import { resolveRunExecution } from './execution-input.ts';
 import { LLM_PROVIDER_PRESETS, normalizeLlmProvider } from '../../shared/llm-providers.ts';
 import {
@@ -41,6 +41,28 @@ function record(value: unknown): Record<string, unknown> {
   assert(value && typeof value === 'object' && !Array.isArray(value));
   return value as Record<string, unknown>;
 }
+
+assert.equal(
+  requestOrigin({
+    headers: { host: 'admin.daost.cn', 'x-forwarded-proto': 'https' },
+    socket: { localPort: 5199 },
+  } as never),
+  'http://127.0.0.1:5199',
+  'server-side Agent calls use the local /llm proxy behind Nginx',
+);
+assert.equal(
+  requestOrigin({ headers: { host: '127.0.0.1:5199' }, socket: {} } as never),
+  'http://127.0.0.1:5199',
+  'direct local development requests remain HTTP',
+);
+assert.equal(
+  requestOrigin({
+    headers: { host: 'admin.daost.cn', 'x-forwarded-proto': 'javascript' },
+    socket: {},
+  } as never),
+  null,
+  'untrusted forwarded protocols are rejected',
+);
 
 
 

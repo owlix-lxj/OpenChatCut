@@ -22,6 +22,10 @@ import {
   serializeModelCapabilityOverrides,
   type ModelCapabilityOverride,
 } from "../shared/model-capabilities.ts";
+import {
+  isPlatformManagedValue,
+  PLATFORM_MODE_ENV,
+} from "../shared/platform-config.ts";
 
 const ACTIVE_PROFILE = runtimeProfile();
 const ENV_PATH = ACTIVE_PROFILE.keystorePath;
@@ -29,6 +33,7 @@ const ENV_PATH = ACTIVE_PROFILE.keystorePath;
 // Whitelist of settable env vars — mirrors what config/vite.config.ts reads. POST /api/keys
 // rejects anything outside this set so the endpoint can never write arbitrary env.
 export const KEY_NAMES = [
+  PLATFORM_MODE_ENV,
   "AGENT_IMPORT_ROOTS",
   "PROXY_URL",
   "LLM_API_KEY",
@@ -119,8 +124,12 @@ export const KEY_NAMES = [
   "FISHAUDIO_TTS_BASE_URL",
   "SPEECHIFY_TTS_API_KEY",
   "SPEECHIFY_TTS_BASE_URL",
+  "QWEN_AUDIO_BASE_URL",
   "SEEDANCE_API_KEY",
   "SEEDANCE_BASE_URL",
+  "JIMENG_ACCESS_KEY",
+  "JIMENG_SECRET_KEY",
+  "JIMENG_BASE_URL",
   "KLING_API_KEY",
   "KLING_BASE_URL",
   "MUREKA_API_KEY",
@@ -175,6 +184,8 @@ export const KEY_NAMES = [
   "INWORLD_TTS_MODEL",
   "FISHAUDIO_TTS_MODEL",
   "SPEECHIFY_TTS_MODEL",
+  "QWEN_TTS_MODEL",
+  "QWEN_ASR_MODEL",
   "MINIMAX_TTS_MODEL",
   "ELEVENLABS_SOUND_MODEL",
   "SEEDANCE_VIDEO_MODEL",
@@ -205,6 +216,7 @@ const SETTABLE = new Set<string>(KEY_NAMES);
 // not credentials). Deliberately a separate explicit list rather than derived from
 // KEY_NAMES: adding a key to the whitelist must never accidentally make it non-secret.
 export const NON_SECRET_NAMES: ReadonlySet<string> = new Set([
+  PLATFORM_MODE_ENV,
   "AGENT_IMPORT_ROOTS",
   "PROXY_URL",
   "LLM_PROVIDER",
@@ -239,6 +251,7 @@ export const NON_SECRET_NAMES: ReadonlySet<string> = new Set([
   "ELEVENLABS_SOUND_MODEL",
   "DOUBAO_TTS_RESOURCE_ID",
   "SEEDANCE_VIDEO_MODEL",
+  "JIMENG_BASE_URL",
   "KLING_VIDEO_MODEL",
   "MUREKA_MUSIC_MODEL",
   "ATLASCLOUD_API_BASE",
@@ -256,6 +269,9 @@ export const NON_SECRET_NAMES: ReadonlySet<string> = new Set([
   "INWORLD_TTS_MODEL",
   "FISHAUDIO_TTS_MODEL",
   "SPEECHIFY_TTS_MODEL",
+  "QWEN_AUDIO_BASE_URL",
+  "QWEN_TTS_MODEL",
+  "QWEN_ASR_MODEL",
   "PREFERRED_IMAGE_VENDOR",
   "PREFERRED_VOICE_VENDOR",
   "PREFERRED_VIDEO_VENDOR",
@@ -371,6 +387,11 @@ export function getKey(name: KeyName): string {
   return store.get(name) ?? "";
 }
 
+/** True when this server is serving a platform-managed deployment. */
+export function isPlatformManaged(): boolean {
+  return isPlatformManagedValue(getKey(PLATFORM_MODE_ENV));
+}
+
 // Capability booleans derived from current key presence — SAME logic as config/vite.config.ts
 // `define` snapshot, but computed live so the agent perceives runtime key changes.
 export interface Caps {
@@ -387,27 +408,28 @@ export interface Caps {
 }
 export function computeCaps(): Caps {
   const has = (n: KeyName): boolean => getKey(n).length > 0;
+  const platformManaged = isPlatformManaged();
+  const imageConfigured = has("IMAGE_API_KEY") || has("OPENAI_API_KEY") || has("LLM_OPENAI_API_KEY");
+  const voiceConfigured =
+    (has("DOUBAO_TTS_APP_ID") && has("DOUBAO_TTS_ACCESS_KEY")) || has("MINIMAX_API_KEY") || has("LLM_QWEN_API_KEY");
+  const videoConfigured = has("SEEDANCE_API_KEY");
   return {
     image:
-      has("IMAGE_API_KEY") ||
-      has("OPENAI_API_KEY") ||
-      has("GEMINI_API_KEY") ||
-      has("MINIMAX_API_KEY") ||
-      has("WAVESPEED_API_KEY") ||
-      has("BYTEPLUS_API_KEY"),
-    voice:
-      (has("DOUBAO_TTS_APP_ID") && has("DOUBAO_TTS_ACCESS_KEY")) ||
+      platformManaged ? imageConfigured : imageConfigured || has("GEMINI_API_KEY") || has("MINIMAX_API_KEY") || has("WAVESPEED_API_KEY") || has("BYTEPLUS_API_KEY"),
+    voice: platformManaged ? voiceConfigured :
+      voiceConfigured ||
       has("ELEVENLABS_API_KEY") ||
-      has("MINIMAX_API_KEY") ||
       has("INWORLD_TTS_API_KEY") ||
       has("FISHAUDIO_TTS_API_KEY") ||
       has("SPEECHIFY_TTS_API_KEY") ||
       (getKey("PREFERRED_VOICE_VENDOR") === "openai" && has("OPENAI_API_KEY")) ||
       (getKey("PREFERRED_VOICE_VENDOR") === "gemini" && has("GEMINI_API_KEY")) ||
       (getKey("PREFERRED_VOICE_VENDOR") === "mistral" && has("LLM_MISTRAL_API_KEY")) ||
-      (getKey("PREFERRED_VOICE_VENDOR") === "cartesia" && has("CARTESIA_API_KEY")),
-    video:
-      has("SEEDANCE_API_KEY") || has("KLING_API_KEY") || has("MINIMAX_API_KEY") || has("BYTEPLUS_API_KEY") || has("LLM_OFOX_API_KEY"),
+      (getKey("PREFERRED_VOICE_VENDOR") === "cartesia" && has("CARTESIA_API_KEY")) ||
+      (getKey("PREFERRED_VOICE_VENDOR") === "qwen" && has("LLM_QWEN_API_KEY")),
+    video: platformManaged ? videoConfigured :
+      videoConfigured || has("KLING_API_KEY") || has("MINIMAX_API_KEY") || has("BYTEPLUS_API_KEY") || has("LLM_OFOX_API_KEY") ||
+      (has("JIMENG_ACCESS_KEY") && has("JIMENG_SECRET_KEY")),
     music: has("MUREKA_API_KEY") || has("MINIMAX_API_KEY") || has("ATLASCLOUD_API_KEY") || has("SONILO_API_KEY"),
     sound: has("ELEVENLABS_API_KEY") || has("SONILO_API_KEY"),
     stock:
@@ -424,7 +446,8 @@ export function computeCaps(): Caps {
       (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "deepgram" && has("DEEPGRAM_API_KEY")) ||
       (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "groq" && has("GROQ_API_KEY")) ||
       (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "elevenlabs" && has("ELEVENLABS_API_KEY")) ||
-      (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "cartesia" && has("CARTESIA_API_KEY")),
+      (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "cartesia" && has("CARTESIA_API_KEY")) ||
+      (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "qwen" && has("LLM_QWEN_API_KEY")),
     sandbox: has("E2B_API_KEY"),
     web: has("FIRECRAWL_API_KEY"),
     storage:
@@ -445,6 +468,7 @@ export interface KeyStatus {
   keys: Record<string, KeyState>;
   caps: Caps;
   models: Record<string, string>;
+  platformManaged: boolean;
 }
 
 /** Browser-facing status. SECURITY INVARIANT: a SECRET key's value (any name not in
@@ -462,7 +486,7 @@ export function keyStatus(): KeyStatus {
     };
     if (NON_SECRET_NAMES.has(name)) models[name] = getKey(name);
   }
-  return { keys, caps: computeCaps(), models };
+  return { keys, caps: computeCaps(), models, platformManaged: isPlatformManaged() };
 }
 
 /** Apply key edits from the settings UI: validate, update memory, persist to .env.local.
@@ -491,7 +515,13 @@ export async function setKeys(patch: Record<string, unknown>): Promise<void> {
   );
   const isolated = isIsolatedDevProfile(ACTIVE_PROFILE);
   const merged = mergeEnvText(existing, clean, isolated);
-  await atomicWriteFile(ENV_PATH, merged, { mode: 0o600 });
+  // Avoid touching the keystore when the requested values already produce the
+  // exact same file. Vite watches .env.local and a needless rewrite here can
+  // trigger an endless config-restart loop during server startup (for example,
+  // when the xAI OAuth initializer clears an already-empty session key).
+  if (merged !== existing) {
+    await atomicWriteFile(ENV_PATH, merged, { mode: 0o600 });
+  }
   for (const [name, v] of clean) {
     if (v) {
       store.set(name, v);

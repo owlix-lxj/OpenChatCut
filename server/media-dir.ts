@@ -16,6 +16,7 @@ import {
   type RuntimeProfile,
 } from './runtime-profile.ts';
 import { resolveMediaReference } from './media-references.ts';
+import { platformStorageScoped, scopedPlatformDirectory } from './platform-storage-scope.ts';
 
 export const DEFAULT_UPLOAD_DIR = join(process.cwd(), 'public', 'media', 'uploads');
 
@@ -46,8 +47,10 @@ export function uploadDir(
   profile: RuntimeProfile = runtimeProfile(),
   configuredMediaDir?: string,
 ): string {
-  if (isIsolatedDevProfile(profile)) return profile.mediaDir;
-  return expandMediaDir(configuredMediaDir ?? getKey('MEDIA_DIR')) ?? profile.mediaDir;
+  const base = isIsolatedDevProfile(profile)
+    ? profile.mediaDir
+    : expandMediaDir(configuredMediaDir ?? getKey('MEDIA_DIR')) ?? profile.mediaDir;
+  return scopedPlatformDirectory(base);
 }
 
 /** Ordered local read roots. Isolated profiles can read only their own media directory. */
@@ -56,6 +59,7 @@ export function uploadReadDirs(
   configuredMediaDir?: string,
 ): readonly string[] {
   const writable = uploadDir(profile, configuredMediaDir);
+  if (platformStorageScoped()) return [writable];
   if (isIsolatedDevProfile(profile) || writable === profile.mediaDir) return [writable];
   return [writable, profile.mediaDir];
 }

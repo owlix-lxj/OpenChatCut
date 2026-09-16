@@ -6,7 +6,7 @@ import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
-  deleteUploadObject, UploadTooLargeError,
+  deleteUploadObject, uploadObjectKey, UploadTooLargeError,
 } from '../r2.ts';
 import { enqueueUploadMutation, uploadDir } from '../media-dir.ts';
 import { safePublicFetch, UnsafePublicUrlError } from '../safe-public-fetch.ts';
@@ -171,7 +171,7 @@ async function handleUploadWrite(
           await unlink(partPath!);
           partPath = undefined;
           sendJson(res, 200, {
-            path, bytes, contentHash, fileKey: `uploads/${name}`,
+            path, bytes, contentHash, fileKey: uploadObjectKey(name),
             assetId: assetId || undefined, cloud, created: true, rollbackToken,
           });
           removeCreatedLocal = false;
@@ -218,7 +218,7 @@ async function handleUploadWrite(
       partPath = undefined;
       await clearUploadOwner(directory, name);
       const cloud = await mirrorUpload(name, finalPath!, req.headers['content-type'] || undefined, logger, 'upload→R2');
-      const fileKey = `uploads/${name}`;
+      const fileKey = uploadObjectKey(name);
       const receipt = handoff
         ? mintUploadReceipt(handoff, { path, fileKey, bytes, contentHash })
         : undefined;

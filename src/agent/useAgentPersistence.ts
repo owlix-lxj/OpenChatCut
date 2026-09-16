@@ -47,6 +47,11 @@ import {
 import type { AgentHookState } from './useAgentState';
 import type { LLMMessage } from './runtime';
 import { showAppToast } from '../ui/appToast';
+import {
+  loadChatConversationStore,
+  saveChatConversationSnapshot,
+  summarizeChatConversations,
+} from '../persist/chatConversations';
 
 export async function recordProposalOutcome(
   projectId: string,
@@ -234,7 +239,17 @@ export async function loadRecoveredAgentSession(
     });
   }
   if (!alive() || await currentAgentSessionGeneration(projectId) !== generation) return null;
-  return { saved, pending, generation, chatUnreadable };
+  const conversationStore = await loadChatConversationStore(projectId, saved);
+  const activeConversation = conversationStore.conversations.find((item) => item.id === conversationStore.activeId)
+    ?? conversationStore.conversations[0];
+  return {
+    saved: activeConversation?.chat ?? saved,
+    pending,
+    generation,
+    chatUnreadable,
+    conversationId: activeConversation?.id ?? null,
+    conversations: summarizeChatConversations(conversationStore),
+  };
 }
 
 function persistedContextUsage(value: unknown): AgentContextUsage | null {
@@ -251,30 +266,8 @@ function persistedContextUsage(value: unknown): AgentContextUsage | null {
     : null;
 }
 
-export async function hydrateAgentSession(
-  state: AgentHookState,
-  projectId: string,
-  alive: () => boolean,
-): Promise<void> {
-  const loaded = await loadRecoveredAgentSession(
-    projectId,
-    alive,
-    recoverInterruptedAgentRuns,
-    state.ctxRef.current.getDoc(),
-  );
-  if (!loaded || !alive()) return;
-  const { saved, pending, chatUnreadable } = loaded;
-  if (chatUnreadable) {
-    // A stored conversation exists but could not be read. Hydrating an empty
-    // session would let the next persist overwrite it, so stop here: leave
-    // hydratedRef/hydrated false (which gates both persistence and new runs)
-    // and surface the reason instead of silently showing an empty chat.
-    state.setMessages([{
-      role: 'error',
-      text: '聊天记录暂时无法读取，已停止加载以避免覆盖已保存的对话。请刷新页面重试。',
-    }]);
-    return;
-  }
+/** Replace the in-memory conversation while keeping the editor/project context intact. */
+export function restoreAgentChat(state: AgentHookState, saved: PersistedChat | null): void {
   state.setMessages(saved ? ensureAgentRetryMetadata(saved.messages as DisplayMessage[]) : []);
   state.setChangeLog(parseAgentChangeLog(saved?.changeLog));
   if (saved) {
@@ -288,6 +281,36 @@ export async function hydrateAgentSession(
   if (contextUsage) state.replaceContextUsage(contextUsage);
   else state.refreshEstimatedContextUsage();
   state.llmProviderRef.current = PROVIDER;
+}
+
+export async function hydrateAgentSession(
+  state: AgentHookState,
+  projectId: string,
+  alive: () => boolean,
+): Promise<void> {
+  const loaded = await loadRecoveredAgentSession(
+    projectId,
+    alive,
+    recoverInterruptedAgentRuns,
+    state.ctxRef.current.getDoc(),
+  );
+  if (!loaded || !alive()) return;
+  const { saved, pending, chatUnreadable, conversationId, conversations } = loaded;
+  if (chatUnreadable) {
+    // A stored conversation exists but could not be read. Hydrating an empty
+    // session would let the next persist overwrite it, so stop here: leave
+    // hydratedRef/hydrated false (which gates both persistence and new runs)
+    // and surface the reason instead of silently showing an empty chat.
+    state.setMessages([{
+      role: 'error',
+      text: '聊天记录暂时无法读取，已停止加载以避免覆盖已保存的对话。请刷新页面重试。',
+    }]);
+    return;
+  }
+  restoreAgentChat(state, saved);
+  state.conversationIdRef.current = conversationId;
+  state.setConversationId(conversationId);
+  state.setConversations(conversations);
   if (pending) state.setProposal(pending);
   state.hydratedRef.current = true;
   state.setHydrated(true);
@@ -471,7 +494,8 @@ export function agentSessionSnapshot(
 let chatSaveFailureShown = false;
 
 function persistAgentSession(state: AgentHookState, projectId: string): void {
-  void saveChat(projectId, agentSessionSnapshot(state)).then(
+  const snapshot = agentSessionSnapshot(state);
+  void saveChat(projectId, snapshot).then(
     () => { chatSaveFailureShown = false; },
     (error: unknown) => {
       console.error('[agent] chat persistence failed:', error);
@@ -480,6 +504,12 @@ function persistAgentSession(state: AgentHookState, projectId: string): void {
       showAppToast('聊天记录保存失败，本次对话可能不会被保留。请检查存储后重试。', { error: true });
     },
   );
+  const conversationId = state.conversationIdRef.current;
+  if (conversationId) {
+    void saveChatConversationSnapshot(projectId, conversationId, snapshot)
+      .then((store) => state.setConversations(summarizeChatConversations(store)))
+      .catch((error: unknown) => console.error('[agent] conversation archive persistence failed:', error));
+  }
 }
 
 export function useAgentPersistence(

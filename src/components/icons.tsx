@@ -11,7 +11,7 @@ export type IconName =
   | 'undo' | 'redo' | 'history' | 'layoutPanel' | 'keyboard' | 'users'
   | 'download' | 'film' | 'clipboard' | 'plug' | 'github' | 'mail' | 'database'
   | 'music' | 'video' | 'image' | 'swap' | 'star' | 'pencil' | 'x' | 'diamond'
-  | 'search' | 'upload' | 'folder' | 'folderPlus' | 'grid' | 'list' | 'sort' | 'filter' | 'more' | 'bug'
+  | 'search' | 'refresh' | 'upload' | 'folder' | 'folderPlus' | 'grid' | 'list' | 'sort' | 'filter' | 'more' | 'bug'
   | 'palette' | 'wand' | 'tracking' | 'qrCode' | 'info';
 
 // stroke path(s) per icon; a few are fill-based (play/pause/cursor/bookmark)
@@ -95,6 +95,7 @@ const P: Record<IconName, string> = {
   x: 'M18 6 6 18 M6 6l12 12',
   diamond: 'M12 2 22 12 12 22 2 12z',
   search: 'M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.3-4.3',
+  refresh: 'M20 11a8 8 0 1 0-2.34 5.66 M20 4v7h-7',
   upload: 'M12 16V3 M7 8l5-5 5 5 M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5',
   qrCode: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h3v3h-3z M18 14h3 M21 17v4h-4 M14 21h3 M6 6h1 M17 6h1 M6 17h1',
   // lucide circle-plus-info: outline circle with an "i" (dot + stem)
@@ -131,37 +132,16 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
   );
 }
 
-/** Brand logo: dialogue bubble + play button (conversational video cutting). Bubble = accent color, play button = onAccent
- * (Skin Discipline Guaranteed ≥4.5 vs.). Use this when replacing sparkles before wordmark. */
+/** AI-cut brand mark supplied by the product owner. */
 export function BrandMark({ size = 16 }: { size?: number }) {
   return (
-    <img src="/openchatcut-icon.png" alt="" aria-hidden width={size} height={size} style={{ display: 'block' }} />
-  );
-}
-
-/** OpenChatCut word mark: OPEN reverse white badge + Chat Cut solid word mark. */
-export function OpenChatCutWordmark({ width = 126 }: { width?: number }) {
-  return (
-    <svg
-      aria-label="OpenChatCut"
-      role="img"
-      width={width}
-      height={width / 4}
-      viewBox="0 0 504 126"
-      style={{ display: 'block', flexShrink: 0 }}
-    >
-      <rect x="0" y="13" width="166" height="92" rx="14" fill="currentColor" />
-      <text
-        fontFamily="Inter, Geist, system-ui, sans-serif"
-        dominantBaseline="alphabetic"
-      >
-        <tspan x="83" y="82" textAnchor="middle" fill="var(--cc-panel)" fontSize="58" fontWeight="850" letterSpacing="-0.045em">
-          OPEN
-        </tspan>
-        <tspan x="188" y="79" fill="currentColor" fontSize="62" fontWeight="720" letterSpacing="-0.045em">
-          Chat Cut
-        </tspan>
-      </text>
-    </svg>
+    <img
+      src={`${import.meta.env.BASE_URL}aicut-icon.png`}
+      alt=""
+      aria-hidden
+      width={Math.round(size * 1.6)}
+      height={size}
+      style={{ display: 'block', flexShrink: 0, objectFit: 'contain' }}
+    />
   );
 }

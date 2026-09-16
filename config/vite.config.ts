@@ -7,6 +7,7 @@ import { serverPlugins } from '../server/plugins/index.ts';
 import { seedKeystore, getKey } from '../server/keystore.ts';
 import { productAssetsPlugin } from '../server/product-assets.ts';
 import { runtimeProfile } from '../server/runtime-profile.ts';
+import { isPlatformManagedValue, PLATFORM_MODE_ENV } from '../shared/platform-config.ts';
 
 const appPackage = JSON.parse(readFileSync('package.json', 'utf8')) as { version?: unknown };
 if (typeof appPackage.version !== 'string') throw new Error('package.json is missing a valid version');
@@ -106,16 +107,21 @@ export default defineConfig(({ mode }) => {
   // takes effect on the next request with no restart. The `const`s below are only the
   // startup snapshot for the `define` (initial agent capability manifest).
   seedKeystore(env);
+  const platformManaged = isPlatformManagedValue(env[PLATFORM_MODE_ENV]);
+  const base = env.OPENCHATCUT_BASE?.trim() || '/';
   const aaiKey = env.ASSEMBLYAI_API_KEY || '';
-  const imageKey = env.IMAGE_API_KEY || env.OPENAI_API_KEY || '';
+  const imageKey = env.IMAGE_API_KEY || env.OPENAI_API_KEY || env.LLM_OPENAI_API_KEY || '';
   const geminiKey = env.GEMINI_API_KEY || '';
   const elevenKey = env.ELEVENLABS_API_KEY || '';
+  const qwenKey = env.LLM_QWEN_API_KEY || '';
   const doubaoAppId = env.DOUBAO_TTS_APP_ID || '';
   const doubaoAccessKey = env.DOUBAO_TTS_ACCESS_KEY || '';
   const murekaKey = env.MUREKA_API_KEY || '';
   // MiniMax domestic open platform — one key gates TTS / Hailuo video / music / image.
   const minimaxKey = env.MINIMAX_API_KEY || '';
   const seedanceKey = env.SEEDANCE_API_KEY || '';
+  const jimengAccessKey = env.JIMENG_ACCESS_KEY || '';
+  const jimengSecretKey = env.JIMENG_SECRET_KEY || '';
   const klingKey = env.KLING_API_KEY || '';
   const pexelsKey = env.PEXELS_API_KEY || '';
   const pixabayKey = env.PIXABAY_API_KEY || '';
@@ -127,15 +133,23 @@ export default defineConfig(({ mode }) => {
   // E2B_TEMPLATE (+ its process.env fallback) is now read live via the keystore getter below.
 
   return {
+    base,
     // Server-computed manifest of which key-gated capabilities are configured,
     // injected for the agent's system prompt (src/agent/capabilities.ts). BOOLEANS
     // ONLY — no key value is ever exposed to the browser.
     define: {
       __APP_VERSION__: JSON.stringify(appPackage.version),
+      __PLATFORM_MANAGED__: JSON.stringify(platformManaged),
       __CONFIGURED_CAPS__: JSON.stringify({
-        image: Boolean(imageKey || geminiKey || minimaxKey),
-        voice: Boolean((doubaoAppId && doubaoAccessKey) || elevenKey || minimaxKey),
-        video: Boolean(seedanceKey || klingKey || minimaxKey),
+        image: platformManaged
+          ? Boolean(imageKey)
+          : Boolean(imageKey || geminiKey || minimaxKey),
+        voice: platformManaged
+          ? Boolean((doubaoAppId && doubaoAccessKey) || minimaxKey || qwenKey)
+          : Boolean((doubaoAppId && doubaoAccessKey) || elevenKey || minimaxKey),
+        video: platformManaged
+          ? Boolean(seedanceKey)
+          : Boolean(seedanceKey || klingKey || minimaxKey || (jimengAccessKey && jimengSecretKey)),
         music: Boolean(murekaKey || minimaxKey),
         sound: Boolean(elevenKey),
         stock: Boolean(pexelsKey || pixabayKey || unsplashKey || freesoundKey),

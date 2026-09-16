@@ -36,6 +36,8 @@ export interface FieldCtx {
   status: KeyStatusResponse | null;
   values: Values;
   reveal: boolean;
+  /** Provider fields are read-only when the server owns the platform credentials. */
+  readOnly: boolean;
   onStage: (field: SettingsField, raw: string) => void;
   onToggleClear: (field: SettingsField) => void;
   modelOptions: Record<string, readonly string[]>;
@@ -88,6 +90,11 @@ export function VendorPane({ page, hint, ctx }: {
         <div style={{ fontSize: 11.5, color: theme.textDim, marginTop: 3, paddingLeft: 26 }}>{t(hint)}</div>
       </div>
       <section style={fieldCardBox}>
+        {ctx.readOnly && (
+          <div style={{ ...pageNote, borderColor: theme.accent, color: theme.textStrong }}>
+            {t('平台模式：此供应商由服务端统一配置，用户无需填写 API Key、地址或模型。')}
+          </div>
+        )}
         {page.note && <div style={pageNote}>{t(page.note)}</div>}
         {page.noteAction && <SettingsNoteAction config={page.noteAction} />}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: page.note ? 9 : 0 }}>
@@ -280,7 +287,7 @@ function codexReasoningOptions(
 
 export function FieldRow({ field, ctx }: { field: SettingsField; ctx: FieldCtx }) {
   const t = useT();
-  const { status, reveal, onStage, onToggleClear } = ctx;
+  const { status, reveal, onStage, onToggleClear, readOnly } = ctx;
   // value: undefined = no temporary changes; '' = temporary cache clear / return to default; the rest = temporary new values.
   const value = ctx.values[field.name];
   const st = status?.keys[field.name];
@@ -289,7 +296,7 @@ export function FieldRow({ field, ctx }: { field: SettingsField; ctx: FieldCtx }
   // Model / routing field echoes the current value of the server; secret / base url will never be backfilled.
   const shown = value ?? (isModelField(field) ? modelValue(status, field.name) : '');
   // Select uses the "default" option to clear; toggle's off/on itself is set/clear.
-  const clearable = configured && field.kind !== 'select' && field.kind !== 'toggle';
+  const clearable = !readOnly && configured && field.kind !== 'select' && field.kind !== 'toggle';
   const discovered = field.name === 'CODEX_MODEL'
     ? ctx.codex.models.map((model) => model.id)
     : field.name === 'COPILOT_MODEL'
@@ -317,24 +324,24 @@ export function FieldRow({ field, ctx }: { field: SettingsField; ctx: FieldCtx }
         )}
       </span>
       {field.kind === 'toggle'
-        ? <ToggleSwitch field={field} shown={shown} onStage={onStage} />
+        ? <ToggleSwitch field={field} shown={shown} onStage={onStage} disabled={readOnly} />
         : shouldRenderModelPicker(field, discovered.length)
           ? <ModelInput field={field} shown={shown} models={discovered} reveal={reveal}
               loading={(field.name === 'CODEX_MODEL' && ctx.codex.modelBusy)
                 || (field.name === 'COPILOT_MODEL' && ctx.copilot.modelBusy)}
-              configured={configured} stagedClear={stagedClear} onStage={onStage} />
+              configured={configured} stagedClear={stagedClear} onStage={onStage} disabled={readOnly} />
           : field.kind === 'select'
-          ? <SelectInput field={field} status={status} shown={shown} options={options} onStage={onStage} />
+          ? <SelectInput field={field} status={status} shown={shown} options={options} onStage={onStage} disabled={readOnly} />
           : field.kind === 'directory'
             ? <DirectoryInput field={field} shown={shown} stagedClear={stagedClear} onStage={onStage} />
             : <TextInput field={field} shown={shown} reveal={reveal} configured={configured}
-                stagedClear={stagedClear} onStage={onStage} />}
+                stagedClear={stagedClear} onStage={onStage} disabled={readOnly} />}
       {field.note && <span style={{ fontSize: 10.5, color: theme.textDim }}>{t(field.note)}</span>}
     </label>
   );
 }
 
-function ModelInput({ field, shown, models, reveal, loading, configured, stagedClear, onStage }: {
+function ModelInput({ field, shown, models, reveal, loading, configured, stagedClear, onStage, disabled }: {
   field: SettingsField;
   shown: string;
   models: readonly string[];
@@ -343,19 +350,20 @@ function ModelInput({ field, shown, models, reveal, loading, configured, stagedC
   configured: boolean;
   stagedClear: boolean;
   onStage: (field: SettingsField, raw: string) => void;
+  disabled?: boolean;
 }) {
   const t = useT();
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: 7 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <TextInput field={field} shown={shown} reveal={reveal} configured={configured}
-          stagedClear={stagedClear} onStage={onStage} />
+          stagedClear={stagedClear} onStage={onStage} disabled={disabled} />
       </div>
       <select
         value=""
         aria-label={t('选择模型')}
         title={t('选择模型')}
-        disabled={models.length === 0}
+        disabled={disabled || models.length === 0}
         aria-busy={loading === true}
         onChange={(event) => {
           if (event.target.value) onStage(field, event.target.value);
@@ -371,20 +379,23 @@ function ModelInput({ field, shown, models, reveal, loading, configured, stagedC
 
 /** Switch field:''/Anything other than '0' = enabled (default), '0' = disabled. On = temporary storage ''(clear key to return to default),
  * Off = Temporary storage '0' - The semantics are naturally consistent with the "'' explicit clear" of buildPatch, and it will take effect immediately after saving. */
-function ToggleSwitch({ field, shown, onStage }: {
+function ToggleSwitch({ field, shown, onStage, disabled }: {
   field: SettingsField; shown: string;
   onStage: (field: SettingsField, raw: string) => void;
+  disabled?: boolean;
 }) {
   const t = useT();
   const on = shown !== '0';
   return (
     <button
       type="button" role="switch" aria-checked={on}
+      disabled={disabled}
       onClick={(e) => { e.preventDefault(); onStage(field, on ? '0' : ''); }}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
         font: 'inherit', fontSize: 11.5, color: on ? ON : theme.textDim,
-        background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer',
+        background: 'none', border: 'none', padding: '2px 0', cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.65 : 1,
       }}
     >
       <span aria-hidden style={{
@@ -405,9 +416,10 @@ function ToggleSwitch({ field, shown, onStage }: {
 interface TextInputProps {
   field: SettingsField; shown: string; reveal: boolean; configured: boolean; stagedClear: boolean;
   onStage: (field: SettingsField, raw: string) => void;
+  disabled?: boolean;
 }
 
-function TextInput({ field, shown, reveal, configured, stagedClear, onStage }: TextInputProps) {
+function TextInput({ field, shown, reveal, configured, stagedClear, onStage, disabled }: TextInputProps) {
   const listId = field.kind === 'text' && field.options ? `cc-dl-${field.name}` : undefined;
   const displayValue = stagedClear ? shown : shown || field.defaultValue || '';
   return (
@@ -415,10 +427,11 @@ function TextInput({ field, shown, reveal, configured, stagedClear, onStage }: T
       <input
         type={field.kind === 'secret' && !reveal ? 'password' : 'text'}
         autoComplete="off" spellCheck={false} list={listId}
+        disabled={disabled}
         value={displayValue}
         onChange={(e) => onStage(field, e.target.value)}
         placeholder={fieldPlaceholder(field, configured, stagedClear)}
-        style={stagedClear ? { ...input, border: `0.5px solid ${WARN}` } : input}
+        style={{ ...(stagedClear ? { ...input, border: `0.5px solid ${WARN}` } : input), opacity: disabled ? 0.7 : 1 }}
       />
       {listId && (
         <datalist id={listId}>
@@ -468,15 +481,16 @@ function DirectoryInput({ field, shown, stagedClear, onStage }: {
   );
 }
 
-function SelectInput({ field, status, shown, options, onStage }: {
+function SelectInput({ field, status, shown, options, onStage, disabled }: {
   field: SettingsField; status: KeyStatusResponse | null; shown: string;
   options?: readonly SelectOption[];
   onStage: (field: SettingsField, raw: string) => void;
+  disabled?: boolean;
 }) {
   const opts = options ?? selectOptions(field);
   const unknown = shown !== '' && !opts.some((o) => o.value === shown);  // Manually changing the value of.env.local is also displayed faithfully
   return (
-    <select value={shown} onChange={(e) => onStage(field, e.target.value)} style={select}>
+    <select value={shown} disabled={disabled} onChange={(e) => onStage(field, e.target.value)} style={{ ...select, opacity: disabled ? 0.7 : 1 }}>
       {unknown && <option value={shown}>{shown}</option>}
       {opts.map((o) => (
         <option key={o.value} value={o.value}>{selectOptionLabel(status, field, o)}</option>

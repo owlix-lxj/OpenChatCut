@@ -10,6 +10,7 @@ Short map of cloud generation tools → providers. Use this when guiding setup o
 | `kling` | Kling Omni | T2V / I2V / first+last; images ≤7 (≤4 with video); **1× refVideo** `feature`\|`base`; multi-shot customize/intelligence; 3–15s; std/pro |
 | `hailuo` | MiniMax | T2V / I2V / first+last; **6\|10s**; 512P (Hailuo-02), 720p→768P, 1080P→6s; optimizer controls; **S2V-01** subject |
 | `grok-imagine-video` | xAI Grok Imagine | T2V only; **1–15s**; 480p/720p/1080p; audio track included; no refs/frames/edit |
+| `jimeng-avatar` | Jimeng OmniHuman | Photo + audio talking avatar; exactly one firstFrame image and one refAudios asset; audio-driven duration; **≤15s per segment**; no hardware; explicit likeness consent required for a recognizable real person |
 
 **Not wired:** Kling element library / voice bind; provider callback URLs; arbitrary third-party generation endpoints.
 
@@ -34,6 +35,7 @@ Short map of cloud generation tools → providers. Use this when guiding setup o
 | `gemini` | AI SDK speech; configured model defaults to `gemini-2.5-flash-preview-tts`; model/output/instructions |
 | `mistral` | AI SDK speech; configured model defaults to `voxtral-mini-tts-2603`; model/output |
 | `cartesia` | AI SDK speech; configured model defaults to `sonic-3`; model/speed/language/output |
+| `qwen` | Alibaba Cloud Qwen-Audio-TTS; defaults to `qwen-audio-3.0-tts-plus`; provider voice ID/model/speed/language/output/instructions |
 
 Every provider is opt-in and requires a concrete provider-specific `voiceId`.
 Only Doubao, ElevenLabs, and MiniMax have curated choices in the voice skill;
@@ -57,6 +59,7 @@ with word/speaker detail preserved when the provider supplies it.
 | `groq` | `GROQ_API_KEY`; optional `GROQ_BASE_URL`; `GROQ_TRANSCRIPTION_MODEL` defaults to `whisper-large-v3-turbo` |
 | `elevenlabs` | `ELEVENLABS_API_KEY`; `ELEVENLABS_TRANSCRIPTION_MODEL` defaults to `scribe_v2` |
 | `cartesia` | `CARTESIA_API_KEY`; `CARTESIA_TRANSCRIPTION_MODEL` defaults to batch-capable `ink-whisper` |
+| `qwen` | `LLM_QWEN_API_KEY`; `QWEN_ASR_MODEL` defaults to `qwen-audio-3.0-asr-flash`; returns word timestamps, no speaker diarization |
 
 ## Music · `submit_music`
 

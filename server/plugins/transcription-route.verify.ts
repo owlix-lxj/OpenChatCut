@@ -20,6 +20,9 @@ const options: TranscriptionOptions = {
   elevenModel: 'scribe_v2',
   cartesiaApiKey: 'cartesia-test-key',
   cartesiaModel: 'ink-whisper',
+  qwenBaseUrl: 'https://dashscope.test',
+  qwenApiKey: 'qwen-test-key',
+  qwenModel: 'qwen-audio-3.0-asr-flash',
   language: 'en',
   diarization: false,
 };

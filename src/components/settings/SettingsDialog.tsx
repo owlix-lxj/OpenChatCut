@@ -3,7 +3,9 @@ import { theme } from '../../theme';
 import { t, useT } from '../../i18n/locale';
 import { Icon } from '../icons';
 import { VendorIcon } from './vendorIcons';
-import { applyLiveCaps, applyLiveKeyStatus, applyLiveModels } from '../../agent/capabilities';
+import {
+  applyLiveCaps, applyLiveKeyStatus, applyLiveModels, applyLivePlatformManaged,
+} from '../../agent/capabilities';
 import { applyAgentModelStatus } from '../../agent/model-selection';
 import {
   TRANSCRIPTION_DIARIZATION_KEY,
@@ -33,6 +35,7 @@ import {
 import {
   SETTINGS_CATEGORIES, buildPatch, categoryGroupStats, findGroup, groupConfigured,
   modelValue, omitKey, savedMessage, vendorConfigured,
+  isPlatformManagedPage, platformizeSettingsGroup,
   type KeyStatusResponse, type SettingsCategory, type SettingsField, type SettingsGroup,
   type SettingsVendorPage, type StagedValues as Values,
 } from './settingsSchema';
@@ -68,7 +71,7 @@ function useKeyStatus(): {
     let alive = true;
     fetch('/api/keys')
       .then((r) => r.json() as Promise<KeyStatusResponse>)
-      .then((d) => { if (alive) setStatus(d); })
+      .then((d) => { if (alive) { setStatus(d); applySavedToAgent(d); } })
       .catch(() => { if (alive) setLoadError(t('无法读取配置（dev 服务未就绪？）')); });
     return () => { alive = false; };
   }, []);
@@ -199,8 +202,9 @@ function seedSelection(initialVendor?: string): { group: SettingsGroup; vendor: 
 function applySavedToAgent(next: KeyStatusResponse): void {
   applyLiveCaps(next.caps);
   applyLiveKeyStatus(next.keys);
+  applyLivePlatformManaged(next.platformManaged === true);
   if (next.models) applyLiveModels(next.models);
-  if (next.models) applyAgentModelStatus(next.keys, next.models);
+  if (next.models) applyAgentModelStatus(next.keys, next.models, next.platformManaged === true);
 }
 
 
@@ -211,6 +215,7 @@ function useFieldContext(
   reveal: boolean,
   refreshStatus: () => Promise<void>,
   copilotEnabled: boolean,
+  readOnly: boolean,
 ): FieldCtx {
   const [modelOptions, setModelOptions] = useState<Record<string, readonly string[]>>({});
   const [autoClearedEffort, setAutoClearedEffort] = useState<string | null>(null);
@@ -239,7 +244,7 @@ function useFieldContext(
       : { ...previous, [field.name]: '' });
   };
   return {
-    status, values, reveal, onStage, onToggleClear, modelOptions, codex, copilot, refreshStatus,
+    status, values, reveal, readOnly, onStage, onToggleClear, modelOptions, codex, copilot, refreshStatus,
     onModelsDiscovered: (name, models) => {
       setModelOptions((previous) => ({ ...previous, [name]: [...new Set(models)] }));
     },
@@ -256,6 +261,9 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
   const { status, setStatus, loadError } = useKeyStatus();
   const [values, setValues] = useState<Values>({});
   const { group, page, selectGroup, selectVendor } = useTreeSelection(initialVendor);
+  const displayGroup = status?.platformManaged ? platformizeSettingsGroup(group) : group;
+  const displayPage = displayGroup.vendors.find((vendor) => vendor.key === page.key)
+    ?? displayGroup.vendors[0];
   const [reveal, setReveal] = useState(false);
   const refreshStatus = async (): Promise<void> => {
     try {
@@ -268,7 +276,8 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
     }
   };
   const ctx = useFieldContext(status, values, setValues, reveal, refreshStatus,
-    page.connection === 'copilot');
+    displayPage.connection === 'copilot',
+    Boolean(status?.platformManaged && isPlatformManagedPage(displayPage.key)));
   useEffect(() => {
     if (!status?.models) return;
     syncTranscriptionPreferences(status.models);
@@ -318,11 +327,12 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
         <div style={bodyRow}>
           <CapabilityTree status={status} codexStatus={codexStatus} copilotStatus={copilotStatus}
             activeGroup={group.key} onSelect={selectGroup} />
-          <VendorList group={group} activeVendor={page.key} onSelectVendor={selectVendor} ctx={ctx} />
-          <VendorPane page={page} hint={group.hint} ctx={ctx} />
+          <VendorList group={displayGroup} activeVendor={displayPage.key} onSelectVendor={selectVendor} ctx={ctx} />
+          <VendorPane page={displayPage} hint={displayGroup.hint} ctx={ctx} />
         </div>
         <FooterBar reveal={reveal} onReveal={setReveal} message={message}
-          dirty={dirty} saving={saving} onClose={requestClose} onSave={() => { void save(); }} />
+          dirty={dirty} saving={saving} readOnly={ctx.readOnly}
+          onClose={requestClose} onSave={() => { void save(); }} />
       </div>
     </div>
   );
@@ -354,7 +364,9 @@ function CapabilityTree({ status, codexStatus, copilotStatus, activeGroup, onSel
         ))}
       </div>
       <p style={sidebarNote}>
-        {t('密钥仅存本机')} <code style={code}>.env.local</code>{t('（已 gitignore），经服务端注入，')}<b>{t('不进浏览器。')}</b>
+        {status?.platformManaged
+          ? <><b>{t('平台统一管理供应商配置。')}</b>{t(' 用户无需填写 API Key，密钥只在服务端使用。')}</>
+          : <>{t('密钥仅存本机')} <code style={code}>.env.local</code>{t('（已 gitignore），经服务端注入，')}<b>{t('不进浏览器。')}</b></>}
       </p>
     </nav>
   );
@@ -435,18 +447,20 @@ function VendorRow({ page, on, active, onSelect }: {
 
 interface FooterBarProps {
   reveal: boolean; onReveal: (v: boolean) => void; message: { text: string; color: string } | null;
-  dirty: boolean; saving: boolean; onClose: () => void; onSave: () => void;
+  dirty: boolean; saving: boolean; readOnly: boolean; onClose: () => void; onSave: () => void;
 }
 
-function FooterBar({ reveal, onReveal, message, dirty, saving, onClose, onSave }: FooterBarProps) {
+function FooterBar({ reveal, onReveal, message, dirty, saving, readOnly, onClose, onSave }: FooterBarProps) {
   const t = useT();
-  const disabled = saving || !dirty;
+  const disabled = saving || !dirty || readOnly;
   return (
     <footer style={foot}>
-      <label style={revealLabel}>
-        <input type="checkbox" checked={reveal} onChange={(e) => onReveal(e.target.checked)} />
-        {t('显示明文')}
-      </label>
+      {readOnly ? <span style={{ ...revealLabel, color: theme.textDim }}>{t('平台统一配置')}</span> : (
+        <label style={revealLabel}>
+          <input type="checkbox" checked={reveal} onChange={(e) => onReveal(e.target.checked)} />
+          {t('显示明文')}
+        </label>
+      )}
       <a href="/fonts/LICENSES.md" target="_blank" rel="noopener noreferrer" style={licenseLink}>
         {t('第三方字体许可')}
       </a>

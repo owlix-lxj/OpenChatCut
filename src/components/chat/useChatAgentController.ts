@@ -29,12 +29,16 @@ function serverRunAdapter(
     proposalStale: bridge.proposalStale,
     liveTool: run.liveTool,
     changeLog: bridge.changeLog,
+    activeConversationId: bridge.activeConversationId,
+    conversations: bridge.conversations,
     send: run.send,
     stop: run.stop,
     // Prompt enhancement is a single, stateless model call (a short text
     // rewrite), not the Agent run loop; it stays a direct model invocation.
     enhance: enhanceAgentPrompt,
     clearHistory: bridge.clearHistory,
+    newConversation: bridge.newConversation,
+    switchConversation: bridge.switchConversation,
     applyProposal: bridge.applyProposal,
     forceApplyProposal: bridge.forceApplyProposal,
     rejectProposal: bridge.rejectProposal,

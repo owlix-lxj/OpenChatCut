@@ -464,9 +464,13 @@ function useMediaAISeeds(options: EditorMediaIngestOptions) {
     setChatCollapsed(false);
     const documents = await readProjectAssetDocuments(assets);
     if (documents.errors[0]) showAppToast(documents.errors[0], { error: true });
+    const courseware = assets.some((asset) => asset.kind === 'document');
+    const instruction = courseware
+      ? '请基于这些课件完成智能制课：提取每页要点，生成自然口语化的逐页讲稿，并在我确认后继续生成课程视频。不要要求我另外选择人物形象、音色或配音服务，优先使用平台默认配置。'
+      : '';
     setChatSeed({
       ...seed,
-      text: documents.blocks.length ? `${seed.text}\n${documents.blocks.join('\n')}` : seed.text,
+      text: `${instruction}${instruction ? '\n' : ''}${seed.text}${documents.blocks.length ? `\n${documents.blocks.join('\n')}` : ''}`,
     });
   }, [setChatCollapsed, setChatSeed]);
   const useTemplateAI = useCallback((tpl: Tpl) => {
@@ -477,7 +481,22 @@ function useMediaAISeeds(options: EditorMediaIngestOptions) {
       references: [{ id: tpl.id, name: tpl.name, kind: 'template' }],
     });
   }, [setChatCollapsed, setChatSeed, t]);
-  return { useMediaAI, useTemplateAI };
+  const useCoursewareAI = useCallback(async (assets: MediaAsset[], mode: 'script' | 'video') => {
+    if (!assets.length) return;
+    setChatCollapsed(false);
+    const seed = createMediaAssetsChatSeed(assets);
+    if (!seed) return;
+    const documents = await readProjectAssetDocuments(assets);
+    if (documents.errors[0]) showAppToast(documents.errors[0], { error: true });
+    const instruction = mode === 'script'
+      ? '请基于这些课件制作一份逐页、口语化的智能制课讲稿：保留关键术语，补充自然过渡，给出每页建议时长，并先在对话中输出完整讲稿供我确认。'
+      : '请基于这些课件直接完成智能制课：先提取每页要点并生成自然口播稿，再按平台默认的数字人、音色和配音配置提交生成课程视频。不要要求我另外选择人物形象、音色或口播脚本；遇到缺少必要生成配置时明确告诉我缺什么。';
+    setChatSeed({
+      ...seed,
+      text: `${instruction}\n${seed.text}${documents.blocks.length ? `\n${documents.blocks.join('\n')}` : ''}`,
+    });
+  }, [setChatCollapsed, setChatSeed]);
+  return { useMediaAI, useTemplateAI, useCoursewareAI };
 }
 
 export function useEditorMediaIngest(options: EditorMediaIngestOptions) {

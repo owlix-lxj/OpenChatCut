@@ -33,6 +33,14 @@ import {
   localAsrPage,
 } from './settingsMediaProviders';
 import { AGENT_VENDOR_PAGES_WITH_VISION, PROXY_PAGE } from './settingsAgentProviders';
+import {
+  isPlatformLlmProvider,
+  PLATFORM_DEFAULT_LLM_CONFIG,
+  PLATFORM_IMAGE_VENDOR,
+  PLATFORM_LLM_PROVIDERS,
+  PLATFORM_VIDEO_VENDOR,
+  PLATFORM_VOICE_PROVIDERS,
+} from '../../../shared/platform-config';
 
 export type {
   FieldKind,
@@ -128,6 +136,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
           { value: 'byteplus', label: 'BytePlus · Seedance' },
           { value: 'grok-imagine-video', label: 'xAI Grok Imagine' },
           { value: 'ofox', label: 'OFox · 多模型' },
+          { value: 'jimeng-avatar', label: '即梦 · 数字人' },
         ]),
         vendors: [
           { key: 'video/seedance', vendor: 'seedance', title: 'Seedance · 火山', fields: [
@@ -155,6 +164,13 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
             fields: [
               modelText('OFOX_VIDEO_MODEL', '视频模型', 'bytedance/seedance-2.0-fast',
                 '测试连接后可直接选择接口返回的模型，也可以手动填写模型 ID。', true),
+            ] },
+          { key: 'video/jimeng-avatar', vendor: 'jimeng', title: '即梦 · 数字人',
+            note: '使用火山引擎视觉智能服务的 OmniHuman 1.0 快速模式：一张单人照片 + 一段音频生成口播数字人视频。首版单段音频限制 15 秒以内，不需要硬件；Access Key / Secret Key 只保存在本机服务端。',
+            fields: [
+              secret('JIMENG_ACCESS_KEY', 'Access Key'),
+              secret('JIMENG_SECRET_KEY', 'Secret Key'),
+              text('JIMENG_BASE_URL', 'Base URL', '默认 https://visual.volcengineapi.com'),
             ] },
         ] },
       { key: 'music', title: '生音乐', hint: 'submit_music · 文字 / 成片生成配乐，任一厂商即可。',
@@ -283,6 +299,85 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     ],
   },
 ];
+
+const PLATFORM_MANAGED_GROUPS = new Set(['llm', 'image', 'voice', 'video']);
+
+/** Whether a settings page contains a provider configuration owned by the platform. */
+export function isPlatformManagedPage(pageKey: string): boolean {
+  return ['llm/', 'image/', 'voice/', 'video/'].some((prefix) => pageKey.startsWith(prefix));
+}
+
+function platformVendorAllowed(groupKey: string, pageKey: string): boolean {
+  if (groupKey === 'llm') {
+    return PLATFORM_LLM_PROVIDERS.some((provider) => pageKey === `llm/${provider}`);
+  }
+  if (groupKey === 'image') return pageKey === 'image/openai';
+  if (groupKey === 'voice') return PLATFORM_VOICE_PROVIDERS.some((provider) => pageKey === `voice/${provider}`);
+  if (groupKey === 'video') return pageKey === 'video/seedance';
+  return true;
+}
+
+function platformizeVendorPage(page: SettingsVendorPage): SettingsVendorPage {
+  if (page.key.startsWith('llm/')) {
+    const provider = page.key.slice('llm/'.length);
+    if (isPlatformLlmProvider(provider)) {
+      const defaults = PLATFORM_DEFAULT_LLM_CONFIG[provider];
+      return {
+        ...page,
+        title: defaults.label,
+        fields: page.fields.map((field) => field.name === `LLM_${provider.toUpperCase()}_BASE_URL`
+          ? { ...field, defaultLabel: defaults.baseUrl }
+          : field.name === `LLM_${provider.toUpperCase()}_MODEL`
+            ? { ...field, defaultLabel: defaults.model }
+            : field),
+      };
+    }
+  }
+  if (page.key !== 'image/openai') return page;
+  return {
+    ...page,
+    title: '喵喵 API · OpenAI 生图',
+    note: '平台统一复用 Agent 的喵喵 API 配置进行 OpenAI 兼容生图，用户无需单独填写生图 Key。',
+    fields: [
+      secret('LLM_OPENAI_API_KEY', '喵喵 API Key'),
+      text('LLM_OPENAI_BASE_URL', 'API URL', PLATFORM_DEFAULT_LLM_CONFIG.openai.baseUrl),
+      modelText('LLM_OPENAI_MODEL', 'OpenAI 模型', PLATFORM_DEFAULT_LLM_CONFIG.openai.model),
+    ],
+  };
+}
+
+function platformizeRoute(groupKey: string, field: SettingsField | undefined): SettingsField | undefined {
+  if (!field || !PLATFORM_MANAGED_GROUPS.has(groupKey) || !field.options) return field;
+  const allowed = groupKey === 'llm'
+    ? new Set<string>(PLATFORM_LLM_PROVIDERS)
+    : groupKey === 'image'
+      ? new Set<string>([PLATFORM_IMAGE_VENDOR])
+      : groupKey === 'voice'
+        ? new Set<string>(PLATFORM_VOICE_PROVIDERS)
+        : new Set<string>([PLATFORM_VIDEO_VENDOR]);
+  const options = field.options.filter((option) => option.value === '' || allowed.has(option.value));
+  if (groupKey === 'llm') {
+    return {
+      ...field,
+      options: options.map((option) => option.value === 'openai'
+        ? { ...option, label: PLATFORM_DEFAULT_LLM_CONFIG.openai.label }
+        : option),
+    };
+  }
+  return { ...field, options };
+}
+
+/** Filter the provider list and default-provider route for platform-managed UI. */
+export function platformizeSettingsGroup(group: SettingsGroup): SettingsGroup {
+  if (!PLATFORM_MANAGED_GROUPS.has(group.key)) return group;
+  return {
+    ...group,
+    route: platformizeRoute(group.key, group.route),
+    vendors: group.vendors
+      .filter((page) => platformVendorAllowed(group.key, page.key))
+      .map(platformizeVendorPage),
+  };
+}
 
 /** Temporary changes: field name in map = temporary storage; '' = clear explicitly (model fields will return to default).*/
 export type StagedValues = Record<string, string>;

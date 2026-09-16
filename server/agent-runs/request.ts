@@ -74,8 +74,20 @@ function validatedMessages(value: unknown): ValidatedCreateInput['messages'] {
 export function requestOrigin(req: IncomingMessage): string | null {
   const host = req.headers.host;
   if (!host || /[/\\@?#,\s]/.test(host)) return null;
+  const forwardedProto = requestHeader(req, 'x-forwarded-proto')?.trim().toLowerCase();
+  if (forwardedProto && forwardedProto !== 'http' && forwardedProto !== 'https') return null;
+  // Server-side Agent turns call this process's own /llm proxy. Prefer the
+  // accepted socket's local port so a reverse-proxied production request does
+  // not round-trip through the public HTTP/HTTPS vhost (and does not need to
+  // forward the tenant's platform-session cookie to authorize that hop).
+  const localPort = req.socket.localPort;
+  if (typeof localPort === 'number' && Number.isInteger(localPort) && localPort > 0 && localPort <= 65_535) {
+    return `http://127.0.0.1:${localPort}`;
+  }
+  const protocol = forwardedProto
+    ?? ((req.socket as IncomingMessage['socket'] & { encrypted?: boolean }).encrypted ? 'https' : 'http');
   try {
-    const url = new URL(`http://${host}`);
+    const url = new URL(`${protocol}://${host}`);
     return url.username || url.password || url.pathname !== '/' || url.search || url.hash
       ? null
       : url.origin;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { minimaxVoiceBody, minimaxVoiceResult } from './voice-providers.ts';
+import { minimaxVoiceBody, minimaxVoiceResult, qwenAudioVoice, qwenAudioVoiceBody } from './voice-providers.ts';
 import { validateVoiceRequest } from './voice.ts';
 import { generateAiVoice } from './voice-ai-sdk.ts';
 import type { VoiceOptions } from './voice-types.ts';
@@ -125,6 +125,17 @@ assert.throws(
   /Fish Audio only accepts text, voiceId, and modelId/,
 );
 
+const qwen = validateVoiceRequest({
+  provider: 'qwen', text: '你好', voiceId: 'longanlingxin', speed: 1.1,
+  languageCode: 'zh', outputFormat: 'wav', instructions: '请用温柔的语气。',
+});
+assert.equal(qwen.outputFormat, 'wav');
+assert.equal(qwen.sampleRate, 24_000);
+assert.throws(
+  () => validateVoiceRequest({ provider: 'qwen', text: 'x', voiceId: 'longanlingxin', pitch: 1 }),
+  /Qwen only accepts/,
+);
+
 const speechify = validateVoiceRequest({ provider: 'speechify', text: 'Hello', voiceId: 'george', modelId: 'simba-english' });
 assert.equal(speechify.provider, 'speechify');
 assert.throws(
@@ -139,6 +150,7 @@ const aiOptions: VoiceOptions = {
   inworldBaseUrl: '', inworldApiKey: '', inworldModel: '',
   fishAudioBaseUrl: '', fishAudioApiKey: '', fishAudioModel: '',
   speechifyBaseUrl: '', speechifyApiKey: '', speechifyModel: '',
+  qwenBaseUrl: '', qwenApiKey: '', qwenModel: 'qwen-audio-3.0-tts-plus',
   ai: {
     openaiBaseUrl: 'https://api.openai.test',
     openaiApiKey: 'openai-test-key',
@@ -182,6 +194,51 @@ try {
   assert.equal(requestSeen, true);
   assert.deepEqual([...generated.bytes], [1, 2, 3]);
   assert.equal(generated.codec, 'mp3');
+
+  const qwenRequest = validateVoiceRequest({
+    provider: 'qwen',
+    text: '你好，欢迎使用 OpenChatCut。',
+    voiceId: 'longanlingxin',
+    modelId: 'qwen-audio-3.0-tts-plus',
+    speed: 1.1,
+    languageCode: 'zh',
+    outputFormat: 'wav',
+    sampleRate: 24_000,
+    instructions: '请用温柔、清晰的语气。',
+  });
+  const qwenBody = qwenAudioVoiceBody(aiOptions, qwenRequest);
+  assert.equal(qwenBody.model, 'qwen-audio-3.0-tts-plus');
+  assert.deepEqual(qwenBody.input, {
+    text: '你好，欢迎使用 OpenChatCut。',
+    voice: 'longanlingxin',
+    format: 'wav',
+    sample_rate: 24_000,
+    rate: 1.1,
+    instruction: '请用温柔、清晰的语气。',
+    language_hints: ['zh'],
+  });
+
+  let qwenCalls = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (qwenCalls++ === 0) {
+      assert.equal(url, 'https://dashscope.test/api/v1/services/audio/tts/SpeechSynthesizer');
+      assert.equal(init?.method, 'POST');
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer qwen-test-key');
+      return new Response(JSON.stringify({ output: { audio: { url: 'https://audio.test/out.wav' } } }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    assert.equal(url, 'https://audio.test/out.wav');
+    return new Response(Buffer.from([9, 8, 7]), { headers: { 'Content-Type': 'audio/wav' } });
+  };
+  const generatedQwen = await qwenAudioVoice({
+    ...aiOptions,
+    qwenBaseUrl: 'https://dashscope.test',
+    qwenApiKey: 'qwen-test-key',
+  }, qwenRequest);
+  assert.deepEqual([...generatedQwen], [9, 8, 7]);
+  assert.equal(qwenCalls, 2);
 } finally {
   globalThis.fetch = originalFetch;
 }

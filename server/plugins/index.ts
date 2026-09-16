@@ -50,15 +50,18 @@ import { xaiOauthPlugin } from "./xai-oauth.ts";
 import { llmProxyPlugin } from "./llm-proxy.ts";
 import { agentRunsPlugin } from "../agent-runs/routes.ts";
 import { resourcePreviewPlugin } from "./resource-preview.ts";
-import { getKey } from "../keystore.ts";
+import { getKey, isPlatformManaged } from "../keystore.ts";
+import { PLATFORM_DEFAULT_LLM_CONFIG } from '../../shared/platform-config.ts';
 
 import { installSystemProxy } from '../net.ts';
 import { requestShapeGatePlugin } from './request-shape-gate';
+import { platformIntegrationPlugin } from './platform-integration.ts';
 
 export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plugin[] {
   installSystemProxy();
   return [
     requestShapeGatePlugin(),
+    platformIntegrationPlugin(),
     crossOriginIsolationPlugin(),
     storageLifecyclePlugin(),
     llmProxyPlugin(),
@@ -100,10 +103,11 @@ export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plu
     probeMediaPlugin(),
     imageGenerationPlugin({
       get baseUrl() {
-        return getKey("IMAGE_BASE_URL") || "https://api.openai.com";
+        return getKey("IMAGE_BASE_URL") || getKey("LLM_OPENAI_BASE_URL")
+          || (isPlatformManaged() ? PLATFORM_DEFAULT_LLM_CONFIG.openai.baseUrl : "https://api.openai.com");
       },
       get apiKey() {
-        return getKey("IMAGE_API_KEY") || getKey("OPENAI_API_KEY");
+        return getKey("IMAGE_API_KEY") || getKey("OPENAI_API_KEY") || getKey("LLM_OPENAI_API_KEY");
       },
       get geminiBaseUrl() {
         return (
@@ -214,6 +218,15 @@ export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plu
       get speechifyModel() {
         return getKey("SPEECHIFY_TTS_MODEL") || "simba-multilingual";
       },
+      get qwenBaseUrl() {
+        return getKey("QWEN_AUDIO_BASE_URL") || getKey("LLM_QWEN_BASE_URL") || "https://dashscope.aliyuncs.com";
+      },
+      get qwenApiKey() {
+        return getKey("LLM_QWEN_API_KEY");
+      },
+      get qwenModel() {
+        return getKey("QWEN_TTS_MODEL") || "qwen-audio-3.0-tts-plus";
+      },
       ai: aiVoiceOptions(),
     }),
     soundGenerationPlugin({
@@ -322,6 +335,15 @@ export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plu
       },
       get ofoxVideoModel() {
         return getKey("OFOX_VIDEO_MODEL") || "bytedance/seedance-2.0-fast";
+      },
+      get jimengBaseUrl() {
+        return getKey("JIMENG_BASE_URL") || "https://visual.volcengineapi.com";
+      },
+      get jimengAccessKey() {
+        return getKey("JIMENG_ACCESS_KEY");
+      },
+      get jimengSecretKey() {
+        return getKey("JIMENG_SECRET_KEY");
       },
       get byteplusModel() {
         return getKey("BYTEPLUS_VIDEO_MODEL") || "seedance-1-5-pro-251215";

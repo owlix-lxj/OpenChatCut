@@ -1,4 +1,5 @@
 import { proxyDispatcher } from '../outbound-proxy.ts';
+import { isPlatformManaged } from '../keystore.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import {
@@ -20,6 +21,7 @@ import {
 } from './video-media.ts';
 import { generateGrokVideo } from './grok-video-provider.ts';
 import { generateOfoxVideo } from './ofox-video-provider.ts';
+import { generateJimengAvatarVideo } from './jimeng-avatar-provider.ts';
 import { saveVideoResults } from './video-result-save.ts';
 import {
   hailuoApiResolution, seedanceApiResolution, validateVideoRequest, videoSeconds,
@@ -52,6 +54,9 @@ interface VideoOptions {
   ofoxBaseUrl: string;
   ofoxApiKey: string;
   ofoxVideoModel: string;
+  jimengBaseUrl: string;
+  jimengAccessKey: string;
+  jimengSecretKey: string;
 }
 
 async function readJson(req: IncomingMessage): Promise<VideoRequest> {
@@ -394,6 +399,9 @@ async function runVideoOperation(
   providerTaskId?: string,
   storedResultUrls: readonly string[] = [],
 ): Promise<GenerationResult | GenerationResult[]> {
+  if (isPlatformManaged() && input.model !== 'seedance2') {
+    throw new Error('平台模式生成视频统一使用 Seedance');
+  }
   const expectedResultCount = expectedVideoResultCount(input);
   const checkpoint = generationResultCheckpoint(storedResultUrls, expectedResultCount, providerTaskId);
   let urls = checkpoint.urls;
@@ -414,7 +422,13 @@ async function runVideoOperation(
           ? await generateOfoxVideo(input, options, registerProviderTask, providerTaskId)
           : input.model === 'kling'
             ? await generateKling(input, options, registerProviderTask, providerTaskId)
-            : await generateHailuo(input, options, registerProviderTask, providerTaskId);
+            : input.model === 'jimeng-avatar'
+              ? await generateJimengAvatarVideo(input, {
+                  baseUrl: options.jimengBaseUrl,
+                  accessKey: options.jimengAccessKey,
+                  secretKey: options.jimengSecretKey,
+                }, registerProviderTask, providerTaskId)
+              : await generateHailuo(input, options, registerProviderTask, providerTaskId);
       urls = requireGenerationResultUrls([url], expectedResultCount);
     }
   }
@@ -431,7 +445,7 @@ async function runVideoOperation(
   return download();
 }
 export function videoGenerationPlugin(options: VideoOptions): Plugin {
-  for (const provider of ['seedance2', 'kling', 'hailuo', 'byteplus', 'grok-imagine-video', 'ofox'] as const) {
+  for (const provider of ['seedance2', 'kling', 'hailuo', 'byteplus', 'grok-imagine-video', 'ofox', 'jimeng-avatar'] as const) {
     registerGenerationJobResumer('submit_video', provider, async (
       snapshot: GenerationJobSnapshot,
       _update,
@@ -462,6 +476,9 @@ export function videoGenerationPlugin(options: VideoOptions): Plugin {
         try {
           const raw = await readJson(req);
           const input = validate(await materializeVideoReferences(raw));
+          if (isPlatformManaged() && input.model !== 'seedance2') {
+            throw new Error('平台模式生成视频统一使用 Seedance');
+          }
           const name = String(input.name ?? '').trim() || `Video · ${(input.prompt || input.multiPrompts?.[0]?.prompt || input.model).slice(0, 36)}`;
           const submitArgs = Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'operationId'));
           const submission = await createGenerationJob(

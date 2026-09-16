@@ -44,4 +44,17 @@ await assert.rejects(
     && error.issues.some((issue) => issue.code === 'hailuo_reference_role'),
 );
 
+await assert.rejects(
+  materializeVideoReferences(request('jimeng-avatar', [{
+    kind: 'asset-master', role: 'first-frame', assetId: 'image-1', path: '/media/uploads/presenter.jpg',
+  }, {
+    kind: 'asset-master', role: 'reference-audio', assetId: 'audio-1', path: '/media/uploads/script.m4a',
+  }, {
+    kind: 'asset-master', role: 'reference-image', assetId: 'image-2', path: '/media/uploads/extra.jpg',
+  }])),
+  (error: unknown) => error instanceof ServerReferencePreflightError
+    && error.issues.some((issue) => issue.code === 'jimeng_reference_role'),
+  'Jimeng must reject extra image references before resolving local files or calling the provider',
+);
+
 console.log('server generation reference preflight checks passed');

@@ -20,6 +20,11 @@ export default {
   '密钥仅存本机': 'Keys are stored only in your local',
   '（已 gitignore），经服务端注入，': ' (gitignored), injected by the server — ',
   '不进浏览器。': 'never sent to the browser.',
+  '平台统一管理供应商配置。': 'Provider configuration is managed by the platform.',
+  ' 用户无需填写 API Key，密钥只在服务端使用。': ' You do not need to enter API keys; credentials stay server-side.',
+  '平台统一配置': 'Platform-managed configuration',
+  '平台模式：此供应商由服务端统一配置，用户无需填写 API Key、地址或模型。':
+    'Platform mode: this provider is configured by the server; no API key, endpoint, or model entry is required.',
 
   // ── Category / Capability Group / Vendor Page Title ──
   'Agent 模型': 'Agent Model',
@@ -265,6 +270,8 @@ export default {
   'Codex 返回了无效的验证地址。': 'Codex returned an invalid verification URL.',
   '内置 Agent 需要 Anthropic API Key。Claude Code 订阅用户请通过「外部 Agent 接入 (MCP)」连接；OpenChatCut 不接收 Claude OAuth。':
     'The built-in Agent requires an Anthropic API key. Claude Code subscription users should connect through “External agents (MCP)”; OpenChatCut does not accept Claude OAuth.',
+  '内置 Agent 需要 Anthropic API Key。请直接配置可用的 API 地址和密钥。': 'The built-in Agent requires an Anthropic API key. Configure a working API endpoint and key directly.',
+  '内置 Agent 需要 Anthropic API Key；请直接配置可用的 API 地址和密钥。': 'The built-in Agent requires an Anthropic API key. Configure a working API endpoint and key directly.',
   '复制失败': 'Copy failed',
   // ──Provider page status/test connection/field rendering──
   '已配置': 'Configured',
@@ -292,6 +299,10 @@ export default {
   'OFox · 多模型网关': 'OFox · Multi-model Gateway',
   '使用 LLM_OFOX_API_KEY（在 Agent 供应商里配置 OFox）生成视频。一个 Key 覆盖 Seedance、Wan 等视频模型；支持文生视频、首帧/首尾帧图生视频与图片参考（最多 9 张）；时长/分辨率按模型由 API 校验，2–30 秒。':
     'Generates videos with LLM_OFOX_API_KEY (configure OFox under Agent providers). One key covers Seedance, Wan and other video models; supports text-to-video, first-frame / first-and-last-frame image-to-video, and up to 9 reference images; duration/resolution are validated per model by the API, 2–30 seconds.',
+  '即梦 · 数字人': 'Jimeng · Digital human',
+  '使用火山引擎视觉智能服务的 OmniHuman 1.0 快速模式：一张单人照片 + 一段音频生成口播数字人视频。首版单段音频限制 15 秒以内，不需要硬件；Access Key / Secret Key 只保存在本机服务端。':
+    'Uses the Volcengine Visual Intelligence OmniHuman 1.0 quick mode: one single-person photo plus one audio clip creates a talking digital-human video. The first version limits each audio segment to 15 seconds and needs no hardware; Access Key / Secret Key stay on the local server.',
+  '默认 https://visual.volcengineapi.com': 'Default https://visual.volcengineapi.com',
   'xAI · Grok Imagine (视频)': 'xAI · Grok Imagine (Video)',
   '验证地址与密钥，并读取该接口可用的模型': 'Verifies the endpoint and key, then loads the models available from that API',
   '选择模型': 'Choose model',
@@ -342,6 +353,14 @@ export default {
   '默认 https://api.atlascloud.ai/api/v1': 'Default https://api.atlascloud.ai/api/v1',
   '默认 https://api.mistral.ai/v1': 'Default https://api.mistral.ai/v1',
   '默认 https://api.groq.com/openai/v1': 'Default https://api.groq.com/openai/v1',
+  '使用同一个 LLM_QWEN_API_KEY。推荐 qwen-audio-3.0-tts-plus（高质量）或 qwen-audio-3.0-tts-flash（更低延迟）。系统音色：plus 可用 longanlingxin / longanlufeng；flash 可用 longanfengyue、longanlingxi、longanxiaoxin 等。': 'Use the same LLM_QWEN_API_KEY. Recommended: qwen-audio-3.0-tts-plus (higher quality) or qwen-audio-3.0-tts-flash (lower latency). System voices: plus includes longanlingxin / longanlufeng; flash includes longanfengyue, longanlingxi, longanxiaoxin, and others.',
+  '支持 Base64 音频和词级时间戳，适合音视频字幕与口播剪辑；当前同步接口单次音频上限以百炼接口返回为准，长音频说话人分离需使用 Filetrans 公网 URL 任务。': 'Supports Base64 audio and word-level timestamps for audio/video subtitles and talking-head editing. The per-request synchronous limit follows the Bailian API response; use a Filetrans task with a public URL for diarization on long audio.',
+  '百炼 API Key': 'Bailian API key',
+  '阿里云百炼 Qwen': 'Alibaba Cloud Bailian Qwen',
+  '阿里云百炼 Qwen-Audio': 'Alibaba Cloud Bailian Qwen-Audio',
+  '阿里云百炼 Qwen-Audio（云端）': 'Alibaba Cloud Bailian Qwen-Audio (cloud)',
+  '音频 Base URL': 'Audio base URL',
+  '默认 https://dashscope.aliyuncs.com': 'Default: https://dashscope.aliyuncs.com',
 
   // ── DesignStylePanel ──
   '设计风格': 'Design Style',

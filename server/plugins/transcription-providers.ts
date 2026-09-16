@@ -4,8 +4,9 @@ import { createDeepgram } from '@ai-sdk/deepgram';
 import { createElevenLabs } from '@ai-sdk/elevenlabs';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
+import { proxyDispatcher } from '../outbound-proxy.ts';
 
-import { versionedApiBaseUrl } from './media-provider-config.ts';
+import { dashScopeServiceUrl, versionedApiBaseUrl } from './media-provider-config.ts';
 
 import type {
   CloudTranscriptionProvider,
@@ -18,6 +19,10 @@ import type {
 
 export class TranscriptionConfigurationError extends Error {}
 
+type FetchInit = Parameters<typeof fetch>[1] & { dispatcher?: unknown };
+const fetchWithProxy = (url: RequestInfo | URL, init?: FetchInit): Promise<Response> =>
+  fetch(url, { ...init, dispatcher: proxyDispatcher() } as RequestInit);
+
 function requireProviderKey(options: TranscriptionOptions, provider: CloudTranscriptionProvider): string {
   if (provider === 'cartesia' && /^ink-2(?:-|$)/i.test(options.cartesiaModel)) {
     throw new TranscriptionConfigurationError(
@@ -28,10 +33,13 @@ function requireProviderKey(options: TranscriptionOptions, provider: CloudTransc
     : provider === 'mistral' ? options.mistralApiKey
       : provider === 'deepgram' ? options.deepgramApiKey
         : provider === 'groq' ? options.groqApiKey
-          : provider === 'elevenlabs' ? options.elevenApiKey
-            : options.cartesiaApiKey;
+            : provider === 'elevenlabs' ? options.elevenApiKey
+            : provider === 'cartesia' ? options.cartesiaApiKey
+              : options.qwenApiKey;
   if (key) return key;
-  const label = provider === 'elevenlabs' ? 'ElevenLabs' : provider[0]!.toUpperCase() + provider.slice(1);
+  const label = provider === 'elevenlabs' ? 'ElevenLabs'
+    : provider === 'qwen' ? 'Alibaba Cloud Qwen'
+      : provider[0]!.toUpperCase() + provider.slice(1);
   throw new TranscriptionConfigurationError(`${label} API key is not configured`);
 }
 
@@ -76,6 +84,105 @@ async function runProvider(options: TranscriptionOptions, request: CloudTranscri
     providerOptions: { cartesia: { ...(request.language === 'auto' ? {} : { language: request.language }),
       timestampGranularities: ['word'] } },
   });
+}
+
+function qwenAudioFormat(audio: Uint8Array): { format: 'wav' | 'mp3' | 'opus'; mime: string } {
+  const bytes = Buffer.from(audio);
+  if (bytes.length >= 4 && bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
+    return { format: 'wav', mime: 'audio/wav' };
+  }
+  if (bytes.length >= 4 && bytes.subarray(0, 4).toString('ascii') === 'OggS') {
+    return { format: 'opus', mime: 'audio/ogg' };
+  }
+  if (bytes.length >= 3 && bytes.subarray(0, 3).toString('ascii') === 'ID3') {
+    return { format: 'mp3', mime: 'audio/mpeg' };
+  }
+  // MPEG audio commonly starts with a sync word rather than an ID3 tag.
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0) {
+    return { format: 'mp3', mime: 'audio/mpeg' };
+  }
+  return { format: 'wav', mime: 'audio/wav' };
+}
+
+export function qwenAudioTranscriptionBody(
+  audio: Uint8Array,
+  model: string,
+  language: string,
+): Record<string, unknown> {
+  const detected = qwenAudioFormat(audio);
+  const data = `data:${detected.mime};base64,${Buffer.from(audio).toString('base64')}`;
+  return {
+    model,
+    input: {
+      messages: [{
+        role: 'user',
+        content: [{ type: 'input_audio', input_audio: { data } }],
+      }],
+    },
+    parameters: {
+      format: detected.format,
+      ...(language !== 'auto' ? { language_hints: [language] } : {}),
+    },
+  };
+}
+
+function qwenResponseError(bodyText: string, status: number): string {
+  try {
+    const body = JSON.parse(bodyText) as { code?: string | number; message?: string; error?: { message?: string } };
+    return body.message ?? body.error?.message ?? `Alibaba Cloud Qwen request failed (${status})`;
+  } catch {
+    return bodyText.slice(0, 300) || `Alibaba Cloud Qwen request failed (${status})`;
+  }
+}
+
+export function parseQwenAudioTranscription(value: unknown): NormalizedTranscriptResult {
+  const output = record(at(value, 'output'));
+  const sentence = record(output?.sentence);
+  const textValue = output?.text ?? sentence?.text;
+  const text = typeof textValue === 'string' ? textValue.trim() : '';
+  const words: NormalizedTranscriptWord[] = [];
+  for (const raw of array(sentence?.words)) {
+    const item = record(raw);
+    const wordText = typeof item?.text === 'string' ? item.text.trim() : '';
+    const punctuation = typeof item?.punctuation === 'string' ? item.punctuation : '';
+    const start = item && typeof item.begin_time === 'number' && Number.isFinite(item.begin_time)
+      ? Math.max(0, Math.round(item.begin_time)) : null;
+    const end = item && typeof item.end_time === 'number' && Number.isFinite(item.end_time)
+      ? Math.max(0, Math.round(item.end_time)) : null;
+    if (!wordText || start == null || end == null) continue;
+    words.push({ text: `${wordText}${punctuation}`, start, end: Math.max(start, end), speaker: null });
+  }
+  if (!text && !words.length) throw new Error('Alibaba Cloud Qwen returned no transcription text');
+  const resolvedText = text || joinedText(words);
+  const startValue = sentence && typeof sentence.begin_time === 'number' ? Math.max(0, Math.round(sentence.begin_time)) : words[0]?.start;
+  const endValue = sentence && typeof sentence.end_time === 'number' ? Math.max(0, Math.round(sentence.end_time)) : words.at(-1)?.end;
+  const utterances = words.length
+    ? [{ speaker: 'A', text: resolvedText, start: startValue ?? words[0]!.start, end: endValue ?? words.at(-1)!.end, words }]
+    : [];
+  return { text: resolvedText, words, utterances };
+}
+
+async function qwenAudioTranscribe(
+  options: TranscriptionOptions,
+  request: CloudTranscriptionRequest,
+): Promise<NormalizedTranscriptResult> {
+  const response = await fetchWithProxy(
+    dashScopeServiceUrl(options.qwenBaseUrl, '/services/aigc/multimodal-generation/generation'),
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${options.qwenApiKey}`,
+        'Content-Type': 'application/json',
+        'X-DashScope-SSE': 'disable',
+      },
+      body: JSON.stringify(qwenAudioTranscriptionBody(request.audio, options.qwenModel, request.language)),
+    },
+  );
+  const bodyText = await response.text();
+  if (!response.ok) throw new Error(qwenResponseError(bodyText, response.status));
+  let body: unknown;
+  try { body = JSON.parse(bodyText); } catch { throw new Error('Alibaba Cloud Qwen returned invalid JSON'); }
+  return parseQwenAudioTranscription(body);
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -162,6 +269,8 @@ export async function transcribeCloudAudio(
   options: TranscriptionOptions,
   request: CloudTranscriptionRequest,
 ): Promise<NormalizedTranscriptResult> {
+  requireProviderKey(options, request.provider);
+  if (request.provider === 'qwen') return qwenAudioTranscribe(options, request);
   const result = await runProvider(options, request);
   const raw = (result.responses[0] as unknown as { body?: unknown } | undefined)?.body;
   const providerWords = normalizedRawWords(request.provider, raw);

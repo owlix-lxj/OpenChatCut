@@ -1,10 +1,6 @@
 
 import { useT } from './i18n/locale';
-import {
-  useAgentBackendSync,
-  useAppRoute,
-  useProjects,
-} from './app/appShell';
+import { useAgentBackendSync, useAppRoute, useProjects } from './app/appShell';
 import { AppSplash, DashboardRoute, EditorRoute } from './app/AppViews';
 import { useInferenceWarmup } from './hooks/useInferenceWarmup';
 import { useUiScaleShortcuts } from './hooks/useUiScaleShortcuts';

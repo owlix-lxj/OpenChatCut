@@ -1,6 +1,7 @@
 import { proxyDispatcher } from '../outbound-proxy.ts';
 import { randomUUID } from 'node:crypto';
 
+import { dashScopeServiceUrl } from './media-provider-config.ts';
 import type { ValidVoiceRequest, VoiceOptions } from './voice-types.ts';
 // Proxy-aware fetch: attaches the configured outbound proxy (keystore
 // PROXY_URL or HTTPS_PROXY/HTTP_PROXY env) via undici dispatcher.
@@ -209,6 +210,45 @@ export async function speechifyVoice(options: VoiceOptions, input: ValidVoiceReq
   const result = await response.json() as { audio_data?: string };
   if (!result.audio_data) throw new Error('Speechify returned no audio');
   return Buffer.from(result.audio_data, 'base64');
+}
+
+export function qwenAudioVoiceBody(options: VoiceOptions, input: ValidVoiceRequest): Record<string, unknown> {
+  const format = input.outputFormat.toLowerCase().split('_')[0] || 'mp3';
+  return {
+    model: input.modelId || options.qwenModel,
+    input: {
+      text: input.text,
+      voice: input.voiceId,
+      format,
+      sample_rate: input.sampleRate,
+      ...(input.speed == null ? {} : { rate: input.speed }),
+      ...(input.instructions ? { instruction: input.instructions } : {}),
+      ...(input.languageCode && input.languageCode !== 'auto' ? { language_hints: [input.languageCode] } : {}),
+    },
+  };
+}
+
+export async function qwenAudioVoice(options: VoiceOptions, input: ValidVoiceRequest): Promise<Buffer> {
+  if (!options.qwenApiKey) throw new Error('Alibaba Cloud Qwen is not configured. Set LLM_QWEN_API_KEY in .env.local or Settings.');
+  const response = await fetchWithProxy(
+    dashScopeServiceUrl(options.qwenBaseUrl, '/services/audio/tts/SpeechSynthesizer'),
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${options.qwenApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(qwenAudioVoiceBody(options, input)),
+    },
+  );
+  if (!response.ok) throw new Error(await providerError(response));
+  const result = await response.json() as { output?: { audio?: { data?: string; url?: string } } };
+  const audio = result.output?.audio;
+  if (audio?.data) return Buffer.from(audio.data, 'base64');
+  if (!audio?.url) throw new Error('Alibaba Cloud Qwen returned no audio URL');
+  const download = await fetchWithProxy(audio.url);
+  if (!download.ok) throw new Error(`Alibaba Cloud Qwen audio download failed (${download.status})`);
+  return Buffer.from(await download.arrayBuffer());
 }
 
 export async function minimaxVoice(options: VoiceOptions, input: ValidVoiceRequest): Promise<MinimaxVoiceResult> {

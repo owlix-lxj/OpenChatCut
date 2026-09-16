@@ -1,4 +1,4 @@
-import { useMemo, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
 import type { SequenceLibraryOption } from './sequenceOptions';
 import type { PlayerRef } from '@remotion/player';
 import { theme } from '../theme';
@@ -31,6 +31,10 @@ import { customTransitionUniforms, getCustomTransition } from '../gl/customTrans
 import type { ZoomEffect } from '../editor/types';
 import { Icon } from '../components/icons';
 import { parseSrt } from '../captions/srt';
+import { DigitalHumanPanel } from './DigitalHumanPanel';
+import type { DigitalHumanInput } from '../editor/digitalHumanFlow';
+import { PlatformMaterialPanel } from './PlatformMaterialPanel';
+import { platformManagedClient } from '../platform/platformIntegration';
 
 // Two built-in LUTs implemented with published camera-log transfer functions.
 // They apply through the same pipeline as other effects.
@@ -50,9 +54,13 @@ const FX_ITEMS: ResourceItem[] = FX_IDS.map((id) => ({ id, name: FX_EFFECTS[id].
 const ZOOM_ITEMS: ResourceItem[] = ZOOM_SHAPE_ORDER.map((s) => ({ id: s, name: ZOOM_SHAPE_LABELS[s] }));
 interface LibraryPanelProps {
   semanticScopeId: string;
+  digitalHumanOpenNonce?: number;
   templates: Tpl[];
   onAddTemplate: (tpl: Tpl) => void;
   onAddAudio: (asset: AudioAsset) => void;
+  onGenerateCourse?: (assets: MediaAsset[], action: 'script' | 'video') => Promise<void> | void;
+  /** Legacy direct digital-human callback retained for workspace compatibility. */
+  onCreateDigitalHuman?: (input: DigitalHumanInput, onStage: (stage: 'voice' | 'avatar') => void) => Promise<string>;
   playerRef: RefObject<PlayerRef | null>;
   fps: number;
   items: TimelineItem[];
@@ -118,20 +126,27 @@ interface LibraryPanelProps {
   onApplyZoom: (zoom: ZoomEffect) => void;
 }
 
-const MAIN_TABS = ['我的素材', '序列', '资源库', '文字稿', '字幕', '技能'] as const;
+const BASE_MAIN_TABS = ['我的素材', '智能制课', '序列', '资源库', '文字稿', '字幕', '技能'] as const;
+type MainTab = (typeof BASE_MAIN_TABS)[number] | '业务素材';
+const MAIN_TABS: readonly MainTab[] = platformManagedClient()
+  ? ['我的素材', '业务素材', ...BASE_MAIN_TABS.slice(1)]
+  : BASE_MAIN_TABS;
 const SUB_TABS = ['MG 动画', '音效', '转场', '特效', '缩放', 'LUT'] as const;
 function localizeDefaultSequenceName(name: string, t: ReturnType<typeof useT>): string {
   const match = /^序列 (\d+)$/.exec(name);
   return match ? t('序列 {n}', { n: match[1]! }) : name;
 }
-export function LibraryPanel({ semanticScopeId, templates, onAddTemplate, onAddAudio, playerRef, fps, items, getSequenceOptions, onAddSequence, trackOptions, captionTracks, onSetCaptions, onCreateCaptionTrack, onUpdateCaptions, onSetItemTranscript, onToggleWord, onCleanScript, onSetGapCap, onSetTranscriptPlayOrder, onReorderTrackItems, onClearEdits, assets, mediaFolders, usedAssetIds, offlineAssetIds, onAssetLoadError, onImportMedia, onImportMobileMedia, onIngestDirectoryAsset, onTranscribeAsset, onAddMediaItem, onAddMediaAssetsToTimeline, onUseMediaAI, onCreateMediaFolder, onRenameMediaFolder, onDeleteMediaFolder, onMoveMediaAssets, onRenameMediaAsset, onRenameMediaAssets, onSetMediaAssetFavorite, onSetMediaAssetsFavorite, onRemoveMediaAsset, onRemoveMediaAssets, onPasteMediaAssets, onRelinkMediaAsset, creativeMode, onCreativeModeChange, onAddSolid, onUseTemplateAI, selectedItem, onApplyTransition, onApplyFx, onApplyZoom }: LibraryPanelProps) {
+export function LibraryPanel({ semanticScopeId, digitalHumanOpenNonce = 0, templates, onAddTemplate, onAddAudio, onGenerateCourse, playerRef, fps, items, getSequenceOptions, onAddSequence, trackOptions, captionTracks, onSetCaptions, onCreateCaptionTrack, onUpdateCaptions, onSetItemTranscript, onToggleWord, onCleanScript, onSetGapCap, onSetTranscriptPlayOrder, onReorderTrackItems, onClearEdits, assets, mediaFolders, usedAssetIds, offlineAssetIds, onAssetLoadError, onImportMedia, onImportMobileMedia, onIngestDirectoryAsset, onTranscribeAsset, onAddMediaItem, onAddMediaAssetsToTimeline, onUseMediaAI, onCreateMediaFolder, onRenameMediaFolder, onDeleteMediaFolder, onMoveMediaAssets, onRenameMediaAsset, onRenameMediaAssets, onSetMediaAssetFavorite, onSetMediaAssetsFavorite, onRemoveMediaAsset, onRemoveMediaAssets, onPasteMediaAssets, onRelinkMediaAsset, creativeMode, onCreativeModeChange, onAddSolid, onUseTemplateAI, selectedItem, onApplyTransition, onApplyFx, onApplyZoom }: LibraryPanelProps) {
   const t = useT();
   const selKind = selectedItem?.kind ?? null;
   const isVisual = selKind != null && selKind !== 'audio';
-  const [mainTab, setMainTab] = useState<(typeof MAIN_TABS)[number]>('我的素材');
+  const [mainTab, setMainTab] = useState<MainTab>('我的素材');
   const [subTab, setSubTab] = useState<(typeof SUB_TABS)[number]>('MG 动画');
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [directoryImportError, setDirectoryImportError] = useState<string | null>(null);
+  useEffect(() => {
+    if (digitalHumanOpenNonce > 0) { setExtensionOpen(false); setMainTab('智能制课'); }
+  }, [digitalHumanOpenNonce]);
   const directoryImport = useDirectoryImport({
     projectId: semanticScopeId,
     fps,
@@ -196,6 +211,10 @@ export function LibraryPanel({ semanticScopeId, templates, onAddTemplate, onAddA
       </div>
       {extensionOpen ? (
         <ExtensionCenter onClose={() => setExtensionOpen(false)} />
+      ) : mainTab === '智能制课' ? (
+        <DigitalHumanPanel assets={assets} onImportMedia={onImportMedia} onGenerateCourse={onGenerateCourse ?? ((courseAssets) => onUseMediaAI(courseAssets))} />
+      ) : mainTab === '业务素材' ? (
+        <PlatformMaterialPanel fps={fps} onImport={onIngestDirectoryAsset} />
       ) : isCaptions ? (
         <CaptionsPanel playerRef={playerRef} fps={fps} items={items} captionTracks={captionTracks} onSetCaptions={onSetCaptions} onUpdateCaptions={onUpdateCaptions} />
       ) : isTranscript ? (

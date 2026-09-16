@@ -118,6 +118,10 @@ assert.equal(seedBody.priority, 9);
 assert.equal(expectedVideoResultCount(seed), 1);
 assert.equal(expectedVideoResultCount(seedControls), 2);
 assert.equal(expectedVideoResultCount({ model: 'kling' }), 1);
+assert.throws(
+  () => validateVideoRequest({ model: 'seedance2', prompt: 'x', likenessConsent: true }),
+  /likenessConsent is supported by jimeng-avatar only/,
+);
 
 // byteplus (BytePlus ModelArk) is the same Ark Seedance API/limits as seedance2.
 const byteplus = validateVideoRequest({ model: 'byteplus', prompt: 'wide shot', durationSeconds: 5 });
@@ -377,6 +381,37 @@ assert.throws(
 assert.throws(
   () => validateVideoRequest({ model: 'ofox', prompt: 'x', shotType: 'customize', multiPrompts: [{ prompt: 'a', duration: 2, index: 1 }, { prompt: 'b', duration: 2, index: 2 }] }),
   /multi-shot and editing options are not supported by ofox/,
+);
+
+// Jimeng OmniHuman quick mode: one image + one audio, no ordinary video params,
+// and explicit likeness consent is required for a recognizable person.
+assert.throws(
+  () => validateVideoRequest({
+    model: 'jimeng-avatar', firstFramePath: '/media/uploads/presenter.jpg',
+    refAudioPaths: ['/media/uploads/script.m4a'],
+  }),
+  /explicit likeness consent/,
+);
+const jimeng = validateVideoRequest({
+  model: 'jimeng-avatar', name: '课程数字人', firstFramePath: '/media/uploads/presenter.jpg',
+  refAudioPaths: ['/media/uploads/script.m4a'], likenessConsent: true,
+});
+assert.equal(jimeng.model, 'jimeng-avatar');
+assert.equal(jimeng.durationSpecified, false);
+assert.equal(jimeng.ratio, '16:9');
+assert.throws(
+  () => validateVideoRequest({
+    model: 'jimeng-avatar', firstFramePath: '/media/uploads/presenter.jpg',
+    refAudioPaths: ['/media/uploads/script.m4a', '/media/uploads/second.m4a'], likenessConsent: true,
+  }),
+  /exactly one refAudios/,
+);
+assert.throws(
+  () => validateVideoRequest({
+    model: 'jimeng-avatar', prompt: '说话', firstFramePath: '/media/uploads/presenter.jpg',
+    refAudioPaths: ['/media/uploads/script.m4a'], likenessConsent: true,
+  }),
+  /only accepts name, firstFrame/,
 );
 
 console.log('video.check: ok (seedance 480p + kling base/feature + hailuo)');

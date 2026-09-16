@@ -109,6 +109,13 @@ assert.equal(ofoxVideo.ratio, '9:16');
 assert.deepEqual(ofoxVideo.refImages, ['asset-a']);
 assert.equal(ofoxVideo.generateAudio, false);
 assert.equal(ofoxVideo.seed, 7);
+const jimengVideo = buildSubmitVideoArgs({
+  model: 'jimeng-avatar', name: '课程数字人', firstFrame: 'image-1', refAudios: ['audio-1'], likenessConsent: true,
+  prompt: 'should be dropped', durationSeconds: 10, ratio: '9:16', resolution: '1080p',
+});
+assert.deepEqual(jimengVideo, {
+  model: 'jimeng-avatar', name: '课程数字人', firstFrame: 'image-1', refAudios: ['audio-1'], likenessConsent: true,
+}, 'Jimeng avatar uses only image/audio/consent fields');
 assert.equal(buildSubmitVideoArgs({ prompt: 'legacy default' }).model, 'seedance2');
 
 const minimaxMusic = buildSubmitMusicArgs({

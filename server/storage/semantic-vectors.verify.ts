@@ -62,6 +62,18 @@ async function main(): Promise<void> {
     const otherScope = searchSemanticVectors('project-b', vector(1), 10);
     assert.equal(otherScope.length, 0, 'another scope must not see these vectors');
 
+    // Platform tenancy uses colon-delimited physical scope ids. They must be
+    // accepted while asset ids continue to use the stricter validator.
+    const platformScope = 'platform-scope:tenant-123:project-9';
+    upsertSemanticVectors(platformScope, 'asset-platform', [
+      { assetId: 'asset-platform', sampleTime: 0, sourceRevision: 'rev-platform', vector: vector(9) },
+    ]);
+    assert.equal(searchSemanticVectors(platformScope, vector(9), 10)[0]?.assetId, 'asset-platform');
+    assert.deepEqual(pruneSemanticVectors(platformScope, ['asset-platform']), {
+      staleModelRemoved: false,
+      staleSourceRemoved: false,
+    });
+
     // ── prune: stale model / missing asset / stale source revision ──
     upsertSemanticVectors('project-a', 'asset-3', [
       { assetId: 'asset-3', sampleTime: 0, sourceRevision: 'rev-old', vector: vector(3) },

@@ -191,9 +191,9 @@ async function unregisterBridgeEditor(
     body.editorId.trim(),
     registrationCapability(req, true),
   );
-  sendBridgeJson(res, removed ? 200 : 409, removed
-    ? { ok: true }
-    : { error: 'editor registration is stale or owned by another session' });
+  // Cleanup is idempotent. A tab that already lost ownership must be able to
+  // finish pagehide/retry teardown without producing a second, noisy 409.
+  sendBridgeJson(res, 200, { ok: true, removed });
 }
 
 async function pollEditorCall(

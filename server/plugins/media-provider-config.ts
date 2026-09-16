@@ -7,6 +7,29 @@ export function versionedApiBaseUrl(baseUrl: string, version: string): string {
   return /\/v\d+(?:beta)?$/i.test(clean) ? clean : `${clean}/${version}`;
 }
 
+/** Build a DashScope service URL from either a root URL, a /v1 URL, or the
+ * OpenAI-compatible Qwen URL saved by the Agent settings page. */
+export function dashScopeServiceUrl(baseUrl: string, servicePath: string): string {
+  const raw = (baseUrl || 'https://dashscope.aliyuncs.com').trim().replace(/\/+$/, '');
+  let root = raw;
+  try {
+    const parsed = new URL(raw);
+    root = `${parsed.protocol}//${parsed.host}`;
+    if (/\/api\/v\d+(?:beta)?$/i.test(parsed.pathname)) {
+      root = `${parsed.origin}${parsed.pathname}`;
+    }
+  } catch {
+    root = raw
+      .replace(/\/compatible-mode\/v\d+(?:beta)?$/i, '')
+      .replace(/\/api\/v\d+(?:beta)?$/i, '')
+      .replace(/\/v\d+(?:beta)?$/i, '')
+      .replace(/\/+$/, '');
+  }
+  const path = servicePath.startsWith('/') ? servicePath : `/${servicePath}`;
+  if (/\/api\/v\d+(?:beta)?$/i.test(root)) return `${root}${path}`;
+  return `${root}/api/v1${path}`;
+}
+
 export function aiVoiceOptions(): AiVoiceOptions {
   return {
     get openaiBaseUrl() { return getKey('IMAGE_BASE_URL') || 'https://api.openai.com'; },
@@ -40,6 +63,11 @@ export function transcriptionOptions(): TranscriptionOptions {
     get elevenModel() { return getKey('ELEVENLABS_TRANSCRIPTION_MODEL') || 'scribe_v2'; },
     get cartesiaApiKey() { return getKey('CARTESIA_API_KEY'); },
     get cartesiaModel() { return getKey('CARTESIA_TRANSCRIPTION_MODEL') || 'ink-whisper'; },
+    get qwenBaseUrl() {
+      return getKey('QWEN_AUDIO_BASE_URL') || getKey('LLM_QWEN_BASE_URL') || 'https://dashscope.aliyuncs.com';
+    },
+    get qwenApiKey() { return getKey('LLM_QWEN_API_KEY'); },
+    get qwenModel() { return getKey('QWEN_ASR_MODEL') || 'qwen-audio-3.0-asr-flash'; },
     get language() { return getKey('TRANSCRIPTION_LANGUAGE') || 'zh'; },
     get diarization() { return getKey('TRANSCRIPTION_DIARIZATION') !== '0'; },
   };

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { loadInitialProjects, syncAgentBackends, type ProjectStartupSource } from './appShell';
-import { getActiveAgentModelChoice } from '../agent/model-selection';
+import { getActiveAgentModelChoice, getAgentModelSnapshot } from '../agent/model-selection';
 import type { ProjectMeta } from '../persist/projectStoreCoordinators';
 import { syncDesktopNativeInferenceEnabled } from '../transcript/desktop-inference-preference';
 
@@ -120,6 +120,99 @@ try {
   clearTimeout(startupTimeout);
   pendingCopilot.resolve(Response.json({ installed: false }));
   globalThis.fetch = originalFetch;
+}
+
+// A configured API provider must remain the first-run default even when the
+// optional Codex backend is installed and reports its own model catalogue.
+const localStorageAfterStartup = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+const fetchAfterStartup = globalThis.fetch;
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: { getItem: () => 'openai:gpt-legacy', setItem: () => undefined },
+});
+try {
+  globalThis.fetch = async (input) => {
+    const path = String(input);
+    if (path === '/api/codex/status') {
+      return Response.json({
+        installed: true,
+        version: 'test',
+        account: { type: 'chatgpt', email: null, planType: null },
+        loginPending: false,
+      });
+    }
+    if (path === '/api/codex/models') {
+      return Response.json({ models: [{
+        id: 'gpt-codex-test',
+        label: 'Codex test',
+        isDefault: true,
+        defaultReasoningEffort: null,
+        supportedReasoningEfforts: [],
+      }] });
+    }
+    return Response.json({
+      keys: {
+        LLM_OPENAI_API_KEY: { configured: true },
+        LLM_DEEPSEEK_API_KEY: { configured: true },
+      },
+      models: {
+        LLM_PROVIDER: 'deepseek',
+        LLM_OPENAI_MODEL: 'gpt-legacy',
+        LLM_DEEPSEEK_MODEL: 'deepseek-chat',
+      },
+    });
+  };
+  await syncAgentBackends(() => true);
+  assert.equal(getActiveAgentModelChoice()?.backend, 'api',
+    'configured DeepSeek remains active when Codex is available');
+  assert.equal(getActiveAgentModelChoice()?.provider, 'deepseek',
+    'configured provider wins over Codex first-run fallback');
+} finally {
+  globalThis.fetch = fetchAfterStartup;
+  if (localStorageAfterStartup) Object.defineProperty(globalThis, 'localStorage', localStorageAfterStartup);
+  else Reflect.deleteProperty(globalThis, 'localStorage');
+}
+
+const platformRequests: string[] = [];
+const fetchAfterPlatform = globalThis.fetch;
+const localStorageAfterPlatform = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: { getItem: () => 'copilot:gpt-stale', setItem: () => undefined },
+});
+try {
+  globalThis.fetch = async (input) => {
+    const path = String(input);
+    platformRequests.push(path);
+    if (path !== '/api/keys') throw new Error(`Unexpected platform startup request: ${path}`);
+    return Response.json({
+      platformManaged: true,
+      keys: {
+        LLM_OPENAI_API_KEY: { configured: true },
+        LLM_DEEPSEEK_API_KEY: { configured: true },
+        LLM_QWEN_API_KEY: { configured: true },
+      },
+      models: {
+        LLM_PROVIDER: 'qwen',
+        LLM_OPENAI_MODEL: 'gpt-stale',
+        LLM_DEEPSEEK_MODEL: 'deepseek-stale',
+        LLM_QWEN_MODEL: 'qwen-plus',
+        COPILOT_MODEL: 'gpt-stale',
+      },
+    });
+  };
+  await syncAgentBackends(() => true);
+  assert.deepEqual(platformRequests, ['/api/keys'],
+    'platform startup does not inspect local Codex or Copilot installations');
+  assert.deepEqual(
+    getAgentModelSnapshot().choices.map((choice) => choice.id),
+    ['openai:gpt-5.6-terra', 'deepseek:deepseek-chat'],
+    'platform startup exposes only the two hosted model choices',
+  );
+} finally {
+  globalThis.fetch = fetchAfterPlatform;
+  if (localStorageAfterPlatform) Object.defineProperty(globalThis, 'localStorage', localStorageAfterPlatform);
+  else Reflect.deleteProperty(globalThis, 'localStorage');
 }
 
 console.log('appShell.verify: project startup and optional-backend isolation passed');

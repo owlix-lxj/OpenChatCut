@@ -38,6 +38,8 @@ import {
 } from '../storage/sqlite-store.ts';
 import { AgentSessionClearBlockedError } from './project-store-agent-session.ts';
 import { scrubInternalPaths } from '../error-scrub.ts';
+import { platformSession, platformStorageScope } from '../platform-session.ts';
+import { physicalProjectStoreKey, withPlatformStorageScope } from '../platform-storage-scope.ts';
 import {
   writeAgentRuntime,
   writeProjectDocument,
@@ -68,16 +70,16 @@ const HTTP_OPERATIONS = {
     scopeId: string;
     assetId: string;
     samples: Parameters<typeof upsertSemanticVectors>[2];
-  }) => upsertSemanticVectors(request.scopeId, request.assetId, request.samples),
+  }) => upsertSemanticVectors(physicalProjectStoreKey(request.scopeId), request.assetId, request.samples),
   semanticVectorsSearch: (request: { scopeId: string; queryVector: number[]; limit: number }) =>
-    searchSemanticVectors(request.scopeId, request.queryVector, request.limit),
+    searchSemanticVectors(physicalProjectStoreKey(request.scopeId), request.queryVector, request.limit),
   semanticVectorsPrune: (request: {
     scopeId: string;
     validAssetIds: string[];
     validSourceRevisions?: Record<string, string>;
-  }) => pruneSemanticVectors(request.scopeId, request.validAssetIds,
+  }) => pruneSemanticVectors(physicalProjectStoreKey(request.scopeId), request.validAssetIds,
     request.validSourceRevisions ? new Map(Object.entries(request.validSourceRevisions)) : undefined),
-  semanticVectorsClear: (request: { scopeId: string }) => clearSemanticVectors(request.scopeId),
+  semanticVectorsClear: (request: { scopeId: string }) => clearSemanticVectors(physicalProjectStoreKey(request.scopeId)),
 };
 
 export function projectStorePlugin(options: { http?: boolean } = {}): Plugin {
@@ -133,6 +135,10 @@ export function projectStorePlugin(options: { http?: boolean } = {}): Plugin {
             return;
           }
           try {
+            if (platformSession(req)) {
+              sendProjectStoreJson(res, 200, { hits: [] });
+              return;
+            }
             const url = new URL(req.url ?? '', 'http://localhost');
             const query = url.searchParams.get('q')?.trim() ?? '';
             const project = url.searchParams.get('project')?.trim() || undefined;
@@ -155,6 +161,10 @@ export function projectStorePlugin(options: { http?: boolean } = {}): Plugin {
             return;
           }
           try {
+            if (platformSession(req)) {
+              sendProjectStoreJson(res, 200, { hits: [] });
+              return;
+            }
             const body = await readBody(req);
             const query = typeof body.query === 'string' ? body.query.trim() : '';
             const queryVector = Array.isArray(body.queryVector)
@@ -184,7 +194,14 @@ export function projectStorePlugin(options: { http?: boolean } = {}): Plugin {
           return;
         }
         try {
-          await handleProjectStoreRequest(req, res, HTTP_OPERATIONS);
+          const session = platformSession(req);
+          if (session) {
+            await withPlatformStorageScope(platformStorageScope(session.claims), () => (
+              handleProjectStoreRequest(req, res, HTTP_OPERATIONS)
+            ));
+          } else {
+            await handleProjectStoreRequest(req, res, HTTP_OPERATIONS);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           server.config.logger.error(`[project-store] ${message}`);

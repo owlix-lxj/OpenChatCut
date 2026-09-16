@@ -3,8 +3,8 @@
 export default {
   '请按“{name}”工作流处理当前工程：{summary}。先检查素材和时间线，再执行并检查成片。': 'Follow the “{name}” workflow for the current project: {summary}. Inspect the media and timeline first, then execute and verify the result.',
   // ── ChatPanel shell ──
-  '展开 OpenChatCut Agent': 'Expand OpenChatCut Agent',
-  '收起 OpenChatCut Agent': 'Collapse OpenChatCut Agent',
+  '展开 AI-cut Agent': 'Expand AI-cut Agent',
+  '收起 AI-cut Agent': 'Collapse AI-cut Agent',
   '清空对话': 'Clear chat',
   'Agent 仍在运行中，无法清空对话。请先等待运行结束或停止当前运行，再试一次。':
     'The Agent is still running and the chat cannot be cleared. Wait for the run to finish or stop it first, then try again.',
@@ -367,6 +367,13 @@ export default {
   '运行 {runId}（{status}）仍在进行。请先停止该运行，确认检查器中没有活动任务后再重试。': 'Run {runId} ({status}) is still active. Stop it, confirm the inspector has no active tasks, then retry.',
   '请确认没有其他 Agent 正在运行，并重试。': 'Confirm no other Agent is running, then retry.',
   '加载更早消息': 'Load earlier messages',
+  '新建对话': 'New conversation',
+  '历史消息': 'Message history',
+  '暂无历史消息': 'No message history yet',
+  'Agent 仍在运行中，请先停止当前运行再切换对话。': 'The Agent is still running. Stop the current run before switching conversations.',
+  '无法切换对话：{error}': 'Unable to switch conversation: {error}',
+  '新建对话失败：{error}': 'Unable to start a new conversation: {error}',
+  '{n} 条消息': '{n} messages',
   '更多工具': 'More tools',
   '选择引用': 'Select reference',
   '工程后来已有其他修改，回滚前会再次确认': 'The project has newer edits. You will be asked to confirm before rollback.',

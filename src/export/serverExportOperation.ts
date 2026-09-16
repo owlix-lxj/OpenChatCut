@@ -44,6 +44,7 @@ import type {
   Translate,
   UseExportWorkflowOptions,
 } from './exportWorkflowTypes';
+import { syncPlatformExport } from '../platform/platformIntegration';
 export { isServerRenderError, ServerRenderError } from './serverExportRenderOperation';
 
 function updateActualEngine(context: ServerExportContext, completed: ExportJobResult): void {
@@ -123,6 +124,7 @@ async function saveCompleted(
       renewed,
       signal,
     );
+    if (format === 'video' && completed.path) await syncPlatformExport(completed.path, filename);
     if (ambiguousDownload) {
       context.endTargetCommit();
     } else {

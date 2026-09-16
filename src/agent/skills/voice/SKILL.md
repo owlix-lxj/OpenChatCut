@@ -42,7 +42,7 @@ Use `submit_voice` to create a TTS audio asset. The current MCP tool contract is
 
 - `provider` is required. Configured choices may be `doubao`, `elevenlabs`,
   `minimax`, `inworld`, `fishaudio`, `speechify`, `openai`, `gemini`,
-  `mistral`, or `cartesia`. All providers are opt-in; use only providers shown
+  `mistral`, `cartesia`, or `qwen`. All providers are opt-in; use only providers shown
   as configured in the capabilities prompt.
 - `voiceId` is required, concrete, and provider-specific. The only exception is
   deliberate MiniMax `timbreWeights` mixing, where `voiceId` must be empty. Do
@@ -56,6 +56,8 @@ Use `submit_voice` to create a TTS audio asset. The current MCP tool contract is
   `outputFormat`, and `instructions`; Mistral supports `modelId` and
   `outputFormat`; Cartesia supports `modelId`, `speed`, `languageCode`, and
   `outputFormat`. Omit unsupported or unrequested fields.
+- Qwen-Audio uses Alibaba Cloud DashScope; it supports `modelId`, `speed`,
+  `languageCode`, `outputFormat`, and optional natural-language `instructions`.
 - Inworld, Fish Audio, and Speechify accept only `voiceId` plus optional
   `modelId`. Do not pass expressive, speed, language, or output controls to
   these providers.
@@ -197,7 +199,7 @@ submitting an option. Use it as the only source for curated preset IDs,
 provider choice, display labels, tags, and bundled sample URLs. Do not create
 voice options from memory, translated names, or broad user descriptions.
 
-For Inworld, Fish Audio, Speechify, OpenAI, Gemini, Mistral, or Cartesia, do not
+For Inworld, Fish Audio, Speechify, OpenAI, Gemini, Mistral, Cartesia, or Qwen, do not
 offer an invented audition list or sample URL. Ask the user for the concrete
 voice ID from that configured provider. A broad description such as "warm
 female" is not a valid `voiceId`.
@@ -379,10 +381,10 @@ submit_sound({
 
 | Field | Description | Notes |
 | --- | --- | --- |
-| `provider` | `doubao`, `elevenlabs`, `minimax`, `inworld`, `fishaudio`, `speechify`, `openai`, `gemini`, `mistral`, or `cartesia` | Required; configured choices only |
+| `provider` | `doubao`, `elevenlabs`, `minimax`, `inworld`, `fishaudio`, `speechify`, `openai`, `gemini`, `mistral`, `cartesia`, or `qwen` | Required; configured choices only |
 | `text` | Text to synthesize | Required |
 | `voiceId` | Concrete provider-specific voice ID | Required except MiniMax timbre mix |
-| `modelId` | Provider model override | ElevenLabs, Inworld, Fish Audio, Speechify, OpenAI, Gemini, Mistral, Cartesia |
+| `modelId` | Provider model override | ElevenLabs, Inworld, Fish Audio, Speechify, OpenAI, Gemini, Mistral, Cartesia, Qwen |
 | `speed` | Speech speed | ElevenLabs, MiniMax, OpenAI, Cartesia |
 | `languageCode` | Language hint/code | ElevenLabs, Cartesia |
 | `outputFormat` | Provider-supported output format | ElevenLabs, OpenAI, Gemini, Mistral, Cartesia |
@@ -410,7 +412,7 @@ list, display labels, tags, and sample URLs.
 The curated catalog contains separate Doubao, ElevenLabs, and MiniMax IDs.
 `vivi` / `dayi` are only Doubao; `mark` / `amelia` / `james` are only
 ElevenLabs; `female-yujie` is only MiniMax. Inworld, Fish Audio, Speechify,
-OpenAI, Gemini, Mistral, and Cartesia require a concrete provider-specific ID
+OpenAI, Gemini, Mistral, Cartesia, and Qwen require a concrete provider-specific ID
 confirmed by the user and have no bundled OpenChatCut samples.
 
 Provider choice:
@@ -431,7 +433,7 @@ Provider choice:
 3. Never recommend or render a curated TTS option before checking
    [references/voices.md](references/voices.md).
 4. Never invent presets or sample URLs for Inworld, Fish Audio, Speechify,
-   OpenAI, Gemini, Mistral, or Cartesia.
+   OpenAI, Gemini, Mistral, Cartesia, or Qwen.
 5. Never pass provider-specific fields to a provider that does not support them.
 6. Never claim stable age, regional accent, pronunciation dictionary, or exact
    duration controls unless the selected provider exposes them.

@@ -9,9 +9,9 @@ export const GENERATE_WORKFLOW = `
 
 ## TTS voice generation
 - Use submit_voice only for explicitly requested TTS after the user confirms a configured provider and a concrete provider-specific voiceId. MiniMax timbre mixing is the only voiceId exception.
-- Providers: doubao, elevenlabs, minimax, inworld, fishaudio, speechify, openai, gemini, mistral, and cartesia. All are opt-in; use only choices listed as configured in the capabilities prompt, and never mix voice catalogs.
+- Providers: doubao, elevenlabs, minimax, inworld, fishaudio, speechify, openai, gemini, mistral, cartesia, and qwen. All are opt-in; use only choices listed as configured in the capabilities prompt, and never mix voice catalogs.
 - Curated choices exist only for Doubao, ElevenLabs, and MiniMax. Bundled samples exist only where references/voices.md lists one. For every other provider, do not invent a preset or sample URL; require a concrete voiceId from the user/provider account.
-- AI SDK-backed fields: OpenAI supports modelId/speed/outputFormat/instructions; Gemini supports modelId/outputFormat/instructions; Mistral supports modelId/outputFormat; Cartesia supports modelId/speed/languageCode/outputFormat. Inworld, Fish Audio, and Speechify accept only voiceId and optional modelId.
+- AI SDK-backed fields: OpenAI supports modelId/speed/outputFormat/instructions; Gemini supports modelId/outputFormat/instructions; Mistral supports modelId/outputFormat; Cartesia supports modelId/speed/languageCode/outputFormat. Qwen-Audio supports modelId/speed/languageCode/outputFormat/instructions and uses Alibaba Cloud's DashScope API. Inworld, Fish Audio, and Speechify accept only voiceId and optional modelId.
 - MiniMax supports speed (0.5–2), pitch (-12–12), volume (0–10), and emotion natively. Doubao pitch is post-process; emotionScale/performancePrompt are Doubao-only. ElevenLabs retains its dedicated delivery controls.
 - submit_voice creates one media-pool audio asset only. Do not claim it was placed on the timeline.
 
@@ -30,13 +30,15 @@ export const GENERATE_WORKFLOW = `
 
 ## Video generation
 - Use submit_video only after an explicit video-generation request. Default to seedance2 when configured, 5 seconds, 16:9, and 720p; never silently add variants, duration, or quality.
+- For a digital human / talking photo, use submit_video with model=jimeng-avatar, exactly one firstFrame image and exactly one refAudios audio asset; do not use ordinary text-to-video. The audio must already exist in the project or be prepared by submit_voice, and must be 15 seconds or less.
+- For a recognizable real person, ask for explicit likeness consent immediately before submission and pass likenessConsent=true only after the user confirms: “我确认拥有该肖像，或已获得创建和使用该数字人形象的授权，并承诺不将其用于冒充他人、欺诈或其他违法用途。” Never infer consent from an upload or project ownership.
 - Seedance supports 2–15 seconds, resolution 480p/720p(default)/1080p/4k, typed image/video/audio references, optional audio/seed/camera/watermark/last-frame/expiry/priority controls. Kling supports 3–15 seconds, std/pro, images (≤7, or ≤4 with one refVideo), refVideoMode feature|base, customize/intelligence multi-shot; use @ImageN/@Video1 in prompts. Hailuo supports 6 or 10 seconds, 512p (Hailuo-02), 720p→768P, or 1080p (6s only), firstFrame/lastFrame, optional promptOptimizer/fastPretreatment, or S2V-01 subject-reference via firstFrame when that model is selected; no multi-ref multi-shot.
 - References must be project asset IDs and must stay in refImages/refVideos/refAudios by media type. lastFrame requires firstFrame.
 - For Kling customize, omit top-level prompt; use 2–6 consecutive multiPrompts whose integer durations sum to durationSeconds.
 - submit_video returns immediately with a jobId. Call track_progress target=generation with action=status or action=wait; only a successful tracked result creates the media-pool video asset.
 
 ## Generation job progress
-- Use track_progress only with target=generation for Sonilo submit_sound, submit_music, and submit_video job IDs. action=params reads submitted settings, status is non-blocking, wait is explicitly bounded by timeoutSeconds, and resume retries a failed result download without regenerating.
+- Use track_progress only with target=generation for asynchronous submit_sound, submit_music, and submit_video job IDs. action=params reads submitted settings, status is non-blocking, wait is explicitly bounded by timeoutSeconds, and resume retries a failed result download without regenerating.
 - Do not claim a generated asset exists until track_progress reports succeeded and addedAssets includes it. Retrying track_progress is idempotent and never duplicates an existing asset.
 
 ## Export

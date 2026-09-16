@@ -9,6 +9,15 @@ import { PROVIDER } from './providerConfig';
 import { canRollbackAgentChange, rollbackAgentChange } from './changeLog';
 import type { AgentHookState } from './useAgentState';
 import { clearStoredServerRun } from './serverRunSessionStorage';
+import {
+  createChatConversation,
+  loadChatConversationStore,
+  saveChatConversationSnapshot,
+  setActiveChatConversation,
+  summarizeChatConversations,
+} from '../persist/chatConversations';
+import { agentSessionSnapshot, restoreAgentChat } from './useAgentPersistence';
+import { saveChat } from '../persist/projectStore';
 
 type ClearBlockedError = Error & {
   code?: string;
@@ -67,6 +76,106 @@ export async function clearAgentHistory(state: AgentHookState, projectId: string
   state.setHydrated(true);
 }
 
+function appendTransitionError(state: AgentHookState, message: string): void {
+  state.setMessages((current) => [...current, { role: 'error', text: message }]);
+}
+
+async function prepareConversationTransition(
+  state: AgentHookState,
+  projectId: string,
+): Promise<number | null> {
+  if (state.runningRef.current) {
+    appendTransitionError(state, t('Agent 仍在运行中，请先停止当前运行再切换对话。'));
+    return null;
+  }
+  const hydrationEpoch = ++state.hydrationEpochRef.current;
+  state.hydratedRef.current = false;
+  state.setHydrated(false);
+  try {
+    await flushChatWrites(projectId);
+    const snapshot = agentSessionSnapshot(state);
+    await saveChat(projectId, snapshot);
+    const currentId = state.conversationIdRef.current;
+    if (currentId) await saveChatConversationSnapshot(projectId, currentId, snapshot);
+    const durable = await loadProposalRecord(projectId);
+    const durableRunId = durable?.phase !== 'settled' ? durable?.proposal.agentRunId : undefined;
+    await clearAgentSessionContext(projectId, durableRunId ? new Set([durableRunId]) : new Set());
+    clearStoredServerRun(projectId);
+    return hydrationEpoch;
+  } catch (error) {
+    if (state.hydrationEpochRef.current !== hydrationEpoch) return null;
+    state.hydratedRef.current = true;
+    state.setHydrated(true);
+    const detail = error instanceof Error ? error.message : String(error);
+    appendTransitionError(state, t('无法切换对话：{error}', { error: detail }));
+    return null;
+  }
+}
+
+function finishConversationTransition(
+  state: AgentHookState,
+  id: string,
+  chat: Parameters<typeof restoreAgentChat>[1],
+  conversations: ReturnType<typeof summarizeChatConversations>,
+): void {
+  state.setProposal(null);
+  state.setProposalStale(false);
+  state.setLiveTool(null);
+  restoreAgentChat(state, chat);
+  state.conversationIdRef.current = id;
+  state.setConversationId(id);
+  state.setConversations(conversations);
+  state.hydratedRef.current = true;
+  state.setHydrated(true);
+}
+
+export async function startNewAgentConversation(state: AgentHookState, projectId: string): Promise<void> {
+  const epoch = await prepareConversationTransition(state, projectId);
+  if (epoch === null || state.hydrationEpochRef.current !== epoch) return;
+  try {
+    const { store, conversation } = await createChatConversation(projectId);
+    await saveChat(projectId, conversation.chat);
+    finishConversationTransition(
+      state,
+      conversation.id,
+      conversation.chat,
+      summarizeChatConversations(store),
+    );
+  } catch (error) {
+    if (state.hydrationEpochRef.current !== epoch) return;
+    state.hydratedRef.current = true;
+    state.setHydrated(true);
+    appendTransitionError(state, t('新建对话失败：{error}', {
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
+export async function switchAgentConversation(
+  state: AgentHookState,
+  projectId: string,
+  id: string,
+): Promise<void> {
+  if (!id || id === state.conversationIdRef.current) return;
+  const before = await loadChatConversationStore(projectId, agentSessionSnapshot(state));
+  const target = before.conversations.find((item) => item.id === id);
+  if (!target) return;
+  const epoch = await prepareConversationTransition(state, projectId);
+  if (epoch === null || state.hydrationEpochRef.current !== epoch) return;
+  try {
+    const store = await setActiveChatConversation(projectId, id);
+    await saveChat(projectId, target.chat);
+    finishConversationTransition(state, id, target.chat, summarizeChatConversations(store));
+  } catch (error) {
+    if (state.hydrationEpochRef.current !== epoch) return;
+    state.hydratedRef.current = true;
+    state.setHydrated(true);
+    appendTransitionError(state, t('无法切换对话：{error}', {
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
 /**
  * Rewind both histories to just before the user turn at `index` so it can be sent again
  * from a clean state. Nothing else moves: timeline edits stay (the change log rolls them
@@ -116,5 +225,20 @@ export function useAgentHistoryActions(state: AgentHookState, projectId: string)
     (index: number) => rewindAgentHistory(stateRef.current, index),
     [],
   );
-  return { clearHistory, rollbackChangeSession, canRollbackChangeSession, rewindTurn };
+  const newConversation = useCallback(
+    () => { void startNewAgentConversation(stateRef.current, projectId); },
+    [projectId],
+  );
+  const switchConversation = useCallback(
+    (id: string) => { void switchAgentConversation(stateRef.current, projectId, id); },
+    [projectId],
+  );
+  return {
+    clearHistory,
+    newConversation,
+    switchConversation,
+    rollbackChangeSession,
+    canRollbackChangeSession,
+    rewindTurn,
+  };
 }

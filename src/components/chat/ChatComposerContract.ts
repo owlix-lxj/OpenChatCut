@@ -40,6 +40,7 @@ export interface ChatComposerProps {
   onDropEditorItem?: (payload: EditorDragPayload) => void;
   taRef: RefObject<HTMLTextAreaElement | null>;
   placeholder?: string;
+  onOpenDigitalHuman?: () => void;
 }
 
 export const REF_ICON: Record<RefItem['kind'], IconName> = {

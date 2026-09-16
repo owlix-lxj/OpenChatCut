@@ -73,6 +73,7 @@ export const TRANSCRIPTION_PROVIDER_IDS = [
   'groq',
   'elevenlabs',
   'cartesia',
+  'qwen',
 ] as const;
 
 export type TranscriptionProviderId = (typeof TRANSCRIPTION_PROVIDER_IDS)[number];

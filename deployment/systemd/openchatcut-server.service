@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenChatCut editor API and rendering service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=live-platform
+Group=live-platform
+WorkingDirectory=/var/lib/openchatcut
+EnvironmentFile=/etc/live-platform/openchatcut-server.env
+Environment=OPENCHATCUT_API_ONLY=true
+Environment=OPENCHATCUT_PLATFORM_MODE=platform
+Environment=OPENCHATCUT_SQLITE_STORE=1
+Environment=OPENCHATCUT_DATA_DIR=/var/lib/openchatcut
+Environment=MEDIA_DIR=/var/lib/openchatcut/media/uploads
+Environment=CC_REMOTION_BUNDLE=/opt/live-platform/current/openchatcut-server/remotion-bundle
+ExecStart=/usr/bin/node /opt/live-platform/current/openchatcut-server/start-openchatcut.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

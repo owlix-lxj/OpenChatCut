@@ -19,8 +19,8 @@ const GENERATE_VERBS = [
   'generate', 'create', 'make', 'synthesize', '生成', '创建', '制作', '合成',
 ];
 const GENERATE_TARGETS = [
-  'image', 'picture', 'photo', 'poster', 'video', 'music', 'sound', 'voiceover', 'shader',
-  '图片', '图像', '照片', '海报', '视频', '音乐', '音效', '配音', '着色器',
+  'image', 'picture', 'photo', 'poster', 'video', 'music', 'sound', 'voiceover', 'shader', 'digital human', 'avatar', 'talking photo',
+  '图片', '图像', '照片', '海报', '视频', '音乐', '音效', '配音', '着色器', '数字人', '数字分身', '照片数字人', '虚拟人',
 ];
 
 const ROUTING_GROUPS: readonly RoutingGroup[] = [
@@ -48,14 +48,14 @@ const ROUTING_GROUPS: readonly RoutingGroup[] = [
   },
   {
     requestContext: [
-      ['elevenlabs', 'doubao', 'minimax', 'inworld', 'fish audio', 'fishaudio', 'speechify', 'openai', 'gemini', 'mistral', 'cartesia'],
+      ['elevenlabs', 'doubao', 'minimax', 'inworld', 'fish audio', 'fishaudio', 'speechify', 'openai', 'gemini', 'mistral', 'cartesia', 'qwen', '阿里云', '百炼'],
       ['tts', 'text-to-speech', 'speech synthesis', 'voice generation', 'voiceover generation', '配音', '语音合成'],
     ],
     tools: ['submit_voice', 'track_progress', 'rerun_generation'],
   },
   {
     requestContext: [
-      ['assemblyai', 'local', 'openai', 'mistral', 'deepgram', 'groq', 'elevenlabs', 'cartesia'],
+      ['assemblyai', 'local', 'openai', 'mistral', 'deepgram', 'groq', 'elevenlabs', 'cartesia', 'qwen', '阿里云', '百炼'],
       ['transcribe', 'transcription', 'speech-to-text', 'stt', 'asr', '转写', '语音识别'],
     ],
     tools: ['transcribe_track', 'read_transcript', 'find_transcript'],

@@ -11,12 +11,10 @@
 // while they are waiting for it.
 import { lazy } from 'react';
 import {
-  loadDesignStylePanel, loadExportDialog, loadSettingsDialog,
-  loadShortcutsDialog, loadVersionHistory,
+  loadDesignStylePanel, loadExportDialog, loadShortcutsDialog, loadVersionHistory,
 } from './workspaceDialogLoaders';
 
 export const ExportDialog = lazy(() => loadExportDialog().then((m) => ({ default: m.ExportDialog })));
-export const SettingsDialog = lazy(() => loadSettingsDialog().then((m) => ({ default: m.SettingsDialog })));
 export const DesignStylePanel = lazy(() => loadDesignStylePanel().then((m) => ({ default: m.DesignStylePanel })));
 export const VersionHistory = lazy(() => loadVersionHistory().then((m) => ({ default: m.VersionHistory })));
 export const ShortcutsDialog = lazy(() => loadShortcutsDialog().then((m) => ({ default: m.ShortcutsDialog })));
