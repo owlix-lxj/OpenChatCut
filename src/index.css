@@ -2181,4 +2181,6 @@ button, input, select { font: inherit; }
 .cc-platform-material-copy small { color: var(--cc-text-dim); }
 .cc-platform-material-action { font-size: 11px; color: var(--cc-accent); }
 .cc-platform-materials-empty, .cc-platform-materials-error { padding: 18px 12px; color: var(--cc-text-dim); font-size: 12px; text-align: center; }
+.cc-platform-materials-more { display: block; width: calc(100% - 16px); margin: 8px; padding: 8px; border: 1px solid var(--cc-border); border-radius: 4px; background: transparent; color: var(--cc-text-dim); font-size: 12px; cursor: pointer; }
+.cc-platform-materials-more:hover { background: var(--cc-hover); color: inherit; }
 .cc-platform-materials-error { color: var(--cc-danger); }

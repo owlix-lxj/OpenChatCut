@@ -26,13 +26,32 @@ export function platformManagedClient(): boolean {
   return typeof __PLATFORM_MANAGED__ !== 'undefined' && __PLATFORM_MANAGED__ === true;
 }
 
-export async function listPlatformMaterials(keyword = ''): Promise<PlatformMaterial[]> {
-  const query = new URLSearchParams({ page: '1', page_size: '100' });
+export interface PlatformMaterialsPage {
+  /** Materials on this page, filtered to the importable kinds (video/image). */
+  items: PlatformMaterial[];
+  /** Raw total across all material kinds — drives "has more" for infinite scroll. */
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function listPlatformMaterials(
+  keyword = '',
+  page = 1,
+  pageSize = 5,
+): Promise<PlatformMaterialsPage> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (keyword.trim()) query.set('keyword', keyword.trim());
   const response = await fetch(`/api/platform/materials?${query}`);
-  const body = await response.json().catch(() => ({})) as { items?: PlatformMaterial[]; error?: string };
+  const body = await response.json().catch(() => ({})) as { items?: PlatformMaterial[]; total?: number; error?: string };
   if (!response.ok) throw new Error(body.error ?? `业务素材加载失败（HTTP ${response.status}）`);
-  return (body.items ?? []).filter((item) => item.type === 'VIDEO' || item.type === 'IMAGE');
+  const raw = body.items ?? [];
+  return {
+    items: raw.filter((item) => item.type === 'VIDEO' || item.type === 'IMAGE'),
+    total: typeof body.total === 'number' ? body.total : raw.length,
+    page,
+    pageSize,
+  };
 }
 
 function kindFor(material: PlatformMaterial): MediaAssetKind {
