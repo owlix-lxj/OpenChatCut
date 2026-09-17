@@ -5,6 +5,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, utimes, writeFile } fro
 import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import { isSafeUploadName, resolveUploadFile, serveDiskFile, uploadDir, uploadReadDirs } from '../media-dir.ts';
+import { resolveOssReference } from '../oss-references.ts';
 import { derivativeQueue, type DerivativeWork } from '../derivative-queue.ts';
 import { handlePreviewProxy, handlePreviewProxyFile } from '../preview-proxy.ts';
 import { capturePreviewGenerationEpoch, invalidatePreviewGenerations, isPreviewGenerationCurrent } from '../preview-cache-epoch.ts';
@@ -152,9 +153,18 @@ async function resolveReq(req: IncomingMessage, res: ServerResponse) {
   const name = uploadNameFromSrc(url.searchParams.get('src') ?? '');
   if (!name) { sendJson(res, 400, { error: 'src must be /media/uploads/<name>' }); return null; }
   const file = resolveUploadFile(name);
-  if (!file || !existsSync(file)) { sendJson(res, 404, { error: 'media not found' }); return null; }
-  const source = await stat(file);
-  return { name, file, source: { size: source.size, mtimeMs: source.mtimeMs } };
+  if (file && existsSync(file)) {
+    const source = await stat(file);
+    return { name, file, source: { size: source.size, mtimeMs: source.mtimeMs } };
+  }
+  // Platform mode: bytes live only in OSS. Feed ffmpeg/ffprobe the public object URL directly
+  // (no local copy); derivatives (poster/filmstrip/waveform) still cache locally, keyed by name+size.
+  const ossRef = resolveOssReference(uploadDir(), name);
+  if (ossRef) {
+    return { name, file: ossRef.sourceUrl, source: { size: ossRef.bytes, mtimeMs: 0 } };
+  }
+  sendJson(res, 404, { error: 'media not found' });
+  return null;
 }
 
 async function runDerivative<T>(

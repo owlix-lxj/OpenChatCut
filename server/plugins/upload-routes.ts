@@ -8,12 +8,20 @@ import {
 } from '../r2.ts';
 import {
   isSafeUploadName, resolveOrHydrateUploadFile, serveDiskFile, syncLegacyUploads,
-  uploadReadDirs,
+  uploadDir, uploadReadDirs,
 } from '../media-dir.ts';
 import { isIsolatedDevProfile } from '../runtime-profile.ts';
 import { listMediaReferences } from '../media-references.ts';
+import {
+  listOssReferences, registerOssReference, resolveOssReference,
+} from '../oss-references.ts';
 import { sha256File } from '../../shared/node-content-hash.ts';
+import { normalizeSha256Hash } from '../../shared/content-hash.ts';
 import { editorCredentialAuthorized } from '../editor-auth.ts';
+import { platformSession } from '../platform-session.ts';
+import {
+  createPlatformMaterial, materialTypeForContentType, signPlatformOssUpload,
+} from './platform-integration.ts';
 import {
   directR2UploadAllowed, mediaName, readBody, sendError, sendJson,
 } from './upload-route-http.ts';
@@ -78,7 +86,20 @@ function handleMediaRead(
     return;
   }
   const local = diskUpload(name);
-  if (!local) { void serveR2Media(name, req, res, logger, dependencies); return; }
+  if (!local) {
+    // Platform mode: media bytes live only in the tenant's OSS library. Redirect to the
+    // public object URL rather than caching a copy on disk.
+    const ossRef = resolveOssReference(uploadDir(), name);
+    if (ossRef) {
+      res.statusCode = 302;
+      res.setHeader('Location', ossRef.sourceUrl);
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader(MEDIA_AUTHORITY_HEADER, 'oss');
+      res.end();
+      return;
+    }
+    void serveR2Media(name, req, res, logger, dependencies); return;
+  }
   res.setHeader(MEDIA_AUTHORITY_HEADER, 'server');
   void serveDiskFile(req, res, local).catch((error: unknown) => {
     logger.error(`[media-dir] ${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -99,6 +120,11 @@ async function handleUploadList(req: IncomingMessage, res: ServerResponse): Prom
         if (info?.isFile()) seen.set(name, { name, bytes: info.size, mtimeMs: info.mtimeMs });
       }
       for (const reference of await listMediaReferences(directory)) {
+        if (isSafeUploadName(reference.name) && !seen.has(reference.name)) {
+          seen.set(reference.name, reference);
+        }
+      }
+      for (const reference of await listOssReferences(directory)) {
         if (isSafeUploadName(reference.name) && !seen.has(reference.name)) {
           seen.set(reference.name, reference);
         }
@@ -127,9 +153,37 @@ async function handleHydrate(
 ): Promise<void> {
   if (req.method !== 'POST') { sendError(res, 405, 'method not allowed — use POST'); return; }
   try {
-    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}') as { name?: string; path?: string };
+    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}') as {
+      name?: string; path?: string; objectKey?: string; sourceUrl?: string;
+      size?: number; contentType?: string; contentHash?: string;
+    };
     const name = hydrateName(body);
     if (!isSafeUploadName(name)) { sendError(res, 400, 'unsafe or missing name'); return; }
+    // Platform mode: the browser already PUT the bytes to OSS. Register the object as a tenant
+    // material and record the name→OSS mapping; nothing is written to local disk.
+    const session = platformSession(req);
+    if (session && typeof body.objectKey === 'string' && body.objectKey
+      && typeof body.sourceUrl === 'string' && /^https?:\/\//i.test(body.sourceUrl)) {
+      const contentType = typeof body.contentType === 'string' && body.contentType
+        ? body.contentType : 'application/octet-stream';
+      const sizeBytes = Number(body.size) > 0 ? Number(body.size) : 0;
+      const contentHash = normalizeSha256Hash(body.contentHash);
+      await createPlatformMaterial(session.token, {
+        type: materialTypeForContentType(contentType),
+        name: typeof body.name === 'string' && body.name ? body.name : name,
+        objectKey: body.objectKey, sourceUrl: body.sourceUrl, mimeType: contentType, sizeBytes,
+      });
+      await registerOssReference(uploadDir(), name, {
+        sourceUrl: body.sourceUrl, objectKey: body.objectKey, bytes: sizeBytes, contentType,
+        ...(contentHash ? { contentHash } : {}),
+      });
+      logger.info(`[upload/hydrate] ${name} → OSS material ${body.objectKey}`);
+      sendJson(res, 200, {
+        ok: true, path: `/media/uploads/${name}`, bytes: sizeBytes,
+        ...(contentHash ? { contentHash } : {}), oss: true,
+      });
+      return;
+    }
     const resolved = await dependencies.resolveUpload(name);
     if (!resolved) {
       sendError(res, 404, r2Config()
@@ -187,10 +241,27 @@ function uploadSlot(body: { name?: string; assetId?: string; contentType?: strin
 
 async function handlePresignPost(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = JSON.parse((await readBody(req)).toString('utf8') || '{}') as {
-    name?: string; assetId?: string; contentType?: string;
+    name?: string; assetId?: string; contentType?: string; size?: number;
   };
   const slot = uploadSlot(body);
   const proxyUrl = `/upload?name=${encodeURIComponent(slot.name)}&assetId=${encodeURIComponent(slot.base)}`;
+  // Platform mode: sign a direct browser→OSS PUT into the tenant material library. The bytes
+  // never transit the editor server's disk; hydrate later registers the object as a material.
+  const session = platformSession(req);
+  if (session) {
+    const sizeBytes = Number(body.size) > 0 ? Number(body.size) : 0;
+    const credential = await signPlatformOssUpload(session.token, {
+      fileName: String(body.name ?? slot.name),
+      contentType: slot.contentType,
+      sizeBytes,
+    });
+    sendJson(res, 200, {
+      ossUpload: true, uploadUrl: credential.uploadUrl, name: slot.name,
+      path: `/media/uploads/${slot.name}`, objectKey: credential.objectKey,
+      sourceUrl: credential.sourceUrl, materialType: credential.type, contentType: slot.contentType,
+    });
+    return;
+  }
   if (directR2UploadAllowed()) {
     const signed = await presignPutUpload(slot.name, slot.contentType);
     if (signed) {

@@ -42,13 +42,80 @@ function platformApiBase(): string {
   return (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL ?? '').trim().replace(/\/$/, '');
 }
 
-async function platformRequest(path: string, token: string, init: RequestInit = {}): Promise<Response> {
+export async function platformRequest(path: string, token: string, init: RequestInit = {}): Promise<Response> {
   const base = platformApiBase();
   if (!base) throw new Error('OPENCHATCUT_PLATFORM_API_BASE_URL is not configured');
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   return fetch(`${base}${path}`, { ...init, headers });
+}
+
+export type PlatformMaterialType = 'VIDEO' | 'IMAGE' | 'AUDIO' | 'DOCUMENT';
+
+/** Map a browser content type to the tenant material library's coarse type. */
+export function materialTypeForContentType(contentType: string): PlatformMaterialType {
+  const value = (contentType || '').toLowerCase();
+  if (value.startsWith('image/')) return 'IMAGE';
+  if (value.startsWith('video/')) return 'VIDEO';
+  if (value.startsWith('audio/')) return 'AUDIO';
+  return 'DOCUMENT';
+}
+
+export interface PlatformOssCredential {
+  uploadUrl: string;
+  objectKey: string;
+  sourceUrl: string;
+  type: PlatformMaterialType;
+}
+
+/** Sign a direct browser→OSS PUT for the tenant material library (generic upload, empty purpose). */
+export async function signPlatformOssUpload(
+  token: string,
+  input: { fileName: string; contentType: string; sizeBytes: number },
+): Promise<PlatformOssCredential> {
+  const type = materialTypeForContentType(input.contentType);
+  const response = await platformRequest('/v1/video-editor/material-upload-credentials', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      file_name: input.fileName,
+      content_type: input.contentType,
+      size_bytes: input.sizeBytes,
+      type,
+      purpose: '',
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`material credential request failed: ${response.status} ${(await response.text()).slice(0, 200)}`);
+  }
+  const credential = await response.json() as { upload_url?: string; object_key?: string; source_url?: string };
+  if (!credential.upload_url || !credential.object_key || !credential.source_url) {
+    throw new Error('invalid material credential response');
+  }
+  return { uploadUrl: credential.upload_url, objectKey: credential.object_key, sourceUrl: credential.source_url, type };
+}
+
+/** Register an already-uploaded OSS object as a material in the tenant library. */
+export async function createPlatformMaterial(
+  token: string,
+  input: { type: PlatformMaterialType; name: string; objectKey: string; sourceUrl: string; mimeType: string; sizeBytes: number },
+): Promise<Record<string, unknown>> {
+  const response = await platformRequest('/v1/video-editor/materials', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      type: input.type,
+      name: input.name.replace(/\.[^/.]+$/, ''),
+      object_key: input.objectKey,
+      source_url: input.sourceUrl,
+      mime_type: input.mimeType,
+      size_bytes: input.sizeBytes,
+      tags: ['OpenChatCut'],
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`material registration failed: ${response.status} ${(await response.text()).slice(0, 200)}`);
+  }
+  return await response.json() as Record<string, unknown>;
 }
 
 function pruneConsumedLaunches(now: number): void {
