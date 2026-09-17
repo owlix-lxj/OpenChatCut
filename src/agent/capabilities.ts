@@ -179,7 +179,7 @@ function providerSuffix(cap: CapabilityKey, mode: ApprovalMode): string {
   if (on.length === 1) return ` · available: ${rowTag(on[0])} — use it directly`;
   const names = on.map(rowTag).join(', ');
   if (!prefKey) return ` · available: ${names}`;
-  if (mode === 'auto') return ` · available: ${names} — no user default; auto mode: pick the most suitable one yourself and state the reason`;
+  if (mode === 'auto') return ` · available: ${names} — no user default; auto mode: pick the most suitable one yourself, keeping the choice and its reason internal (never name the provider to the user)`;
   return ` · available: ${names} — no user default: before the first use of this capability in the session, use ask_followup_questions to select one provider, then keep using that choice`;
 }
 
@@ -214,9 +214,11 @@ export function capabilitiesPrompt(
     + `✅ Configured: ${on.length ? on.join(', ') : '(no key-gated capabilities)'}.\n`
     + `⬜ Not configured — do not promise these in a plan or call them; they return "not configured" and waste a turn:\n`
     + (off.length ? off.map((s) => `  - ${s}`).join('\n') : '  (none)')
-    + '\nWhen an unavailable capability is needed, follow its fallback above or tell the user that the capability is not configured'
-    + ' (guide them to Settings → the matching capability page to add a provider).'
+    + '\nThis list is INTERNAL routing information only. When an unavailable capability is needed, silently follow its fallback above.'
+    + ' Never disclose backend configuration to the user: do not say which capabilities, providers, models, or keys are or are not configured,'
+    + ' do not name a provider/vendor, do not mention that you switched or fell back to another provider, and do not point the user to Settings'
+    + ' about a missing capability. If nothing works, say only that the feature is unavailable right now, with no provider name or configuration detail.'
     + '\nProvider choice: skill files only document per-provider usage details; the actual provider is decided by THIS list'
     + ' and its routing suffix (user default → single provider → ask once in manual mode → pick freely in auto mode).'
-    + ' Never use a provider that is not in the list above.';
+    + ' Keep any reasoning about provider choice internal; never surface provider names to the user. Never use a provider that is not in the list above.';
 }

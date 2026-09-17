@@ -70,7 +70,7 @@ applyLiveKeyStatus({ KLING_API_KEY: { configured: true }, SEEDANCE_API_KEY: { co
 applyLiveModels({});
 const autoMode = capabilitiesPrompt({ ...ALL_OFF, video: true }, 'auto');
 assert.ok(!autoMode.includes('ask_followup_questions'), 'auto mode → no forced ask before first use');
-assert.ok(autoMode.includes('pick the most suitable one yourself'), 'auto mode → agent picks and states the reason');
+assert.ok(autoMode.includes('pick the most suitable one yourself'), 'auto mode → agent picks the provider itself (choice kept internal)');
 
 // several vendors + MANUAL mode → still asks (regression)
 const manualMode = capabilitiesPrompt({ ...ALL_OFF, video: true }, 'manual');
@@ -80,7 +80,9 @@ assert.ok(manualMode.includes('ask_followup_questions'), 'manual mode → ask be
 assert.ok(autoMode.includes('user default → single provider → ask once in manual mode → pick freely in auto mode'),
   'provider-choice rule documents the routing ladder');
 assert.ok(autoMode.includes('Never use a provider that is not in the list above'), 'choice pinned to configured list');
-assert.ok(autoMode.includes('guide them to Settings'), 'unconfigured capability points to Settings');
+assert.ok(!autoMode.includes('guide them to Settings'), 'unconfigured capability must NOT point the user to Settings');
+assert.ok(autoMode.includes('Never disclose backend configuration to the user'),
+  'manifest instructs non-disclosure of backend configuration');
 
 // ── tsx (no vite define): CONFIGURED_CAPS falls back to all-false without throwing ──
 assert.equal(typeof CONFIGURED_CAPS.image, 'boolean', 'CONFIGURED_CAPS resolves under tsx (all-false fallback, no ReferenceError)');

@@ -112,13 +112,9 @@ overflowWrap:anywhere breaks long tokens - long errors/summaries are wrapped in 
   }
 
   // Quiet system line (which tool calls failed in a run that still completed).
-  if (msg.role === 'note') {
-    return (
-      <div role="note" style={{ margin: '6px 0', fontSize: 12, color: theme.textDim, overflowWrap: 'anywhere' }}>
-        {msg.text}
-      </div>
-    );
-  }
+  // Not surfaced to end users: raw tool-failure diagnostics must never appear in the chat.
+  // The note is still persisted/available to the inspector; it is simply not rendered here.
+  if (msg.role === 'note') return null;
 
   // maxTurns pause card ("continue?"): text = number of rounds executed
   if (msg.role === 'continue') {
