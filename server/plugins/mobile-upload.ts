@@ -2,8 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { editorCredentialAuthorized, trustedEditorRequest } from '../editor-auth.ts';
 import { MobileUploadService } from '../mobile-upload-service.ts';
-import { platformManaged } from '../platform-session.ts';
+import { platformManaged, platformSession } from '../platform-session.ts';
+import { registerOssReference } from '../oss-references.ts';
 import { putUploadFile } from '../r2.ts';
+import { createPlatformMaterial, signPlatformOssUpload } from './platform-integration.ts';
 import { maxUploadBytes } from './upload.ts';
 
 const PHONE_ROUTE = /^\/s\/[A-Za-z0-9_-]+(\/upload)?$/;
@@ -66,7 +68,11 @@ export async function handleMobileUploadControl(
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (req.method === 'POST' && url.pathname === '/sessions') {
       const origin = platformManaged() ? publicOriginOf(req) : undefined;
-      sendJson(res, 201, await service.createSession(mobilePageLocale(url.searchParams.get('locale')), origin));
+      // Capture the editor's platform token so phone uploads can stream to the tenant OSS library.
+      const platformToken = platformManaged() ? platformSession(req)?.token : undefined;
+      sendJson(res, 201, await service.createSession(
+        mobilePageLocale(url.searchParams.get('locale')), origin, platformToken,
+      ));
       return;
     }
     const match = /^\/sessions\/([0-9a-f-]+)$/.exec(url.pathname);
@@ -96,6 +102,14 @@ export function mobileUploadPlugin(): Plugin {
       const service = new MobileUploadService({
         maxBytes: maxUploadBytes(),
         afterSave: (name, path, mime) => putUploadFile(name, path, mime),
+        // Platform mode: phone uploads stream directly to the tenant OSS material library.
+        oss: platformManaged() ? {
+          signOssUpload: (token, input) => signPlatformOssUpload(token, input),
+          createMaterial: (token, input) => createPlatformMaterial(token, {
+            ...input, type: input.type as 'VIDEO' | 'IMAGE' | 'AUDIO' | 'DOCUMENT',
+          }).then(() => undefined),
+          registerOssRef: (directory, name, record) => registerOssReference(directory, name, record),
+        } : undefined,
         log: (message) => server.config.logger.warn(message),
       });
       server.httpServer?.once('close', () => { void service.stop(); });

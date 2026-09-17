@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MobileUploadService } from './mobile-upload-service';
@@ -157,6 +160,79 @@ try {
   } finally {
     await scoped.stop();
     await rm(scopedDir, { recursive: true, force: true });
+  }
+}
+
+// Platform mode with OSS hooks: a phone upload streams straight to OSS (no local disk),
+// registers a tenant material, and records the name→OSS reference with a content hash
+// computed over the streamed bytes.
+{
+  const received: { body: Buffer; contentType: string | undefined } = { body: Buffer.alloc(0), contentType: undefined };
+  const ossServer = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    req.on('end', () => {
+      received.body = Buffer.concat(chunks);
+      received.contentType = req.headers['content-type'];
+      res.statusCode = 200;
+      res.end('ok');
+    });
+  });
+  await new Promise<void>((resolve) => ossServer.listen(0, '127.0.0.1', () => resolve()));
+  const ossPort = (ossServer.address() as AddressInfo).port;
+  const ossDir = await mkdtemp(join(tmpdir(), 'openchatcut-mobile-oss-'));
+  const created: { objectKey: string; type: string; sizeBytes: number }[] = [];
+  const refs: { name: string; sourceUrl: string; objectKey: string; contentHash?: string; bytes: number }[] = [];
+  const ossService = new MobileUploadService({
+    bindHost: '127.0.0.1', addresses: () => ['127.0.0.1'], uploadDirectory: () => ossDir,
+    maxBytes: 1024, sessionTtlMs: 2_000,
+    oss: {
+      signOssUpload: async (token, input) => {
+        assert.equal(token, 'tok-xyz');
+        assert.equal(input.contentType, 'image/png');
+        assert.equal(input.sizeBytes, 8);
+        return {
+          uploadUrl: `http://127.0.0.1:${ossPort}/put/obj.png`,
+          objectKey: 'materials/t/image/obj.png',
+          sourceUrl: 'https://oss.example.com/materials/t/image/obj.png',
+          type: 'IMAGE',
+        };
+      },
+      createMaterial: async (_token, input) => { created.push({ objectKey: input.objectKey, type: input.type, sizeBytes: input.sizeBytes }); },
+      registerOssRef: async (_dir, name, record) => { refs.push({ name, ...record }); },
+    },
+  });
+  try {
+    const session = await ossService.createSession('zh', undefined, 'tok-xyz');
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const res = await fetch(`${session.urls[0]}/upload?name=phone.png`, {
+      method: 'POST', headers: { 'content-type': 'image/png' }, body: pngBytes,
+    });
+    assert.equal(res.status, 200);
+    const record = await res.json() as { path: string; bytes: number };
+    assert.equal(record.bytes, 8);
+    assert.match(record.path, /^\/media\/uploads\/[0-9a-f-]+\.png$/);
+    assert.deepEqual(received.body, pngBytes, 'exact bytes streamed to OSS');
+    assert.equal((await readdir(ossDir)).length, 0, 'no media (or part file) written to local disk');
+    assert.equal(created.length, 1);
+    assert.equal(created[0]?.objectKey, 'materials/t/image/obj.png');
+    assert.equal(created[0]?.type, 'IMAGE');
+    assert.equal(created[0]?.sizeBytes, 8);
+    assert.equal(refs.length, 1);
+    assert.equal(refs[0]?.sourceUrl, 'https://oss.example.com/materials/t/image/obj.png');
+    assert.equal(refs[0]?.contentHash, createHash('sha256').update(pngBytes).digest('hex'), 'content hash over streamed bytes');
+
+    // A spoofed png (wrong magic) is rejected before anything reaches OSS.
+    created.length = 0; refs.length = 0;
+    const spoof = await fetch(`${session.urls[0]}/upload?name=bad.png`, {
+      method: 'POST', headers: { 'content-type': 'image/png' }, body: Buffer.from('not-a-png'),
+    });
+    assert.equal(spoof.status, 415);
+    assert.equal(created.length, 0, 'invalid media never registered as a material');
+  } finally {
+    await ossService.stop();
+    await new Promise<void>((resolve) => ossServer.close(() => resolve()));
+    await rm(ossDir, { recursive: true, force: true });
   }
 }
 
