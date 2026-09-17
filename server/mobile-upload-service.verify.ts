@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MobileUploadService } from './mobile-upload-service';
 import { isLoopbackAddress } from './loopback-address';
+import { currentPlatformStorageScope, withPlatformStorageScope } from './platform-storage-scope';
 
 assert.equal(isLoopbackAddress('127.0.0.1'), true);
 assert.equal(isLoopbackAddress('::1'), true);
@@ -129,6 +130,33 @@ try {
   } finally {
     await platform.stop();
     await rm(platformDir, { recursive: true, force: true });
+  }
+}
+
+// Regression: a session created inside a platform tenant/user scope must write
+// phone uploads within that SAME scope. Otherwise files land in the unscoped dir
+// and the scoped editor cannot load them (they show as offline/lost).
+{
+  const scopedDir = await mkdtemp(join(tmpdir(), 'openchatcut-mobile-scope-'));
+  let uploadScope: string | undefined = 'UNSET';
+  const scoped = new MobileUploadService({
+    bindHost: '127.0.0.1',
+    addresses: () => ['127.0.0.1'],
+    uploadDirectory: () => { uploadScope = currentPlatformStorageScope(); return scopedDir; },
+    maxBytes: 16,
+    sessionTtlMs: 2_000,
+  });
+  try {
+    const session = await withPlatformStorageScope('tenant-42', () => scoped.createSession('zh'));
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const res = await fetch(`${session.urls[0]}/upload?name=phone.png`, {
+      method: 'POST', headers: { 'content-type': 'image/png' }, body: pngBytes,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(uploadScope, 'tenant-42', 'phone upload must write within the session-captured platform scope');
+  } finally {
+    await scoped.stop();
+    await rm(scopedDir, { recursive: true, force: true });
   }
 }
 

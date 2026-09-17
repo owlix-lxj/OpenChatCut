@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { isSafeUploadName, uploadDir } from './media-dir.ts';
+import { currentPlatformStorageScope, withPlatformStorageScope } from './platform-storage-scope.ts';
 
 const DEFAULT_SESSION_TTL_MS = 10 * 60_000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -49,6 +50,11 @@ interface MobileUploadSession extends MobileUploadSessionSnapshot {
   closing: boolean;
   timer: NodeJS.Timeout;
   activeUploads: Set<Promise<void>>;
+  /** Platform tenant/user storage scope captured from the editor request that
+   * created the session. The phone upload carries no platform session, so files
+   * are written under this scope — otherwise they land in the unscoped dir and
+   * the scoped editor cannot load them (they show as offline/lost). */
+  scope: string | undefined;
 }
 
 export type MobilePageLocale = 'zh' | 'en' | 'it' | 'ru';
@@ -225,6 +231,9 @@ export class MobileUploadService {
     locale: MobilePageLocale = 'zh',
     publicOrigin?: string,
   ): Promise<MobileUploadSessionSnapshot> {
+    // Capture the caller's platform scope now, while still on the editor
+    // request's async context, so phone uploads write to the same tenant/user dir.
+    const scope = currentPlatformStorageScope();
     const id = randomUUID();
     const token = randomBytes(24).toString('base64url');
     const expiresAt = Date.now() + this.options.sessionTtlMs;
@@ -242,7 +251,7 @@ export class MobileUploadService {
     }
     const timer = setTimeout(() => { void this.closeSession(id); }, this.options.sessionTtlMs);
     timer.unref();
-    const session: MobileUploadSession = { id, token, locale, urls, expiresAt, files: [], closing: false, timer, activeUploads: new Set() };
+    const session: MobileUploadSession = { id, token, locale, urls, expiresAt, files: [], closing: false, timer, activeUploads: new Set(), scope };
     this.sessions.set(id, session);
     return this.snapshot(session);
   }
@@ -322,7 +331,10 @@ export class MobileUploadService {
       if (!session) { sendNotFound(res); return; }
       if (!match[2] && req.method === 'GET') { this.sendPage(res, session.locale); return; }
       if (match[2] && req.method === 'POST') {
-        const upload = this.receiveUpload(session, url, req, res);
+        // Write within the session's captured tenant/user scope so the file lands
+        // in the same dir (and R2 key) the scoped editor reads from.
+        const run = (): Promise<void> => this.receiveUpload(session, url, req, res);
+        const upload = session.scope ? withPlatformStorageScope(session.scope, run) : run();
         session.activeUploads.add(upload);
         try { await upload; } finally { session.activeUploads.delete(upload); }
         return;
