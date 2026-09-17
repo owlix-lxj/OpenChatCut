@@ -5,6 +5,7 @@ import {
   editorCallBinding,
   touchEditor,
   editorRegistrationMatches,
+  editorRegistrationTakenOver,
   nextEditorCall,
   nextEditorCancellation,
   registerEditor,
@@ -38,6 +39,7 @@ export type { BridgeOperations } from './external-agent-bridge-routes.ts';
 const bridgeOperations: BridgeOperations = {
   claimBrowserOwnership: claimBrowserProjectOwnership,
   editorRegistrationMatches,
+  editorRegistrationTakenOver,
   registerEditor,
   unregisterEditor,
   nextEditorCall,

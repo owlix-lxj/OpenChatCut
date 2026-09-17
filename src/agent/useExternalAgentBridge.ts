@@ -24,6 +24,7 @@ export { projectExternalReply } from './external-result-projection';
 import { externalBridgeCanStart, type ExternalBridgeReadinessToken } from './external-bridge-readiness';
 import {
   EditorBridgeRequestError,
+  bridgeConflictTakenOver,
   editorBridgeHeaders,
   registerEditorBridge,
   sendEditorBridgeResult,
@@ -158,7 +159,10 @@ async function pollEditor(
       signal,
     });
     if (response.status === 204) continue;
-    if (!response.ok) throw new EditorBridgeRequestError('poll', response.status);
+    if (!response.ok) {
+      const takenOver = response.status === 409 && await bridgeConflictTakenOver(response);
+      throw new EditorBridgeRequestError('poll', response.status, takenOver);
+    }
     await executeExternalCall(
       parseExternalCall(await response.json()),
       runtime,
@@ -191,7 +195,10 @@ async function pollCancellations(
       signal,
     });
     if (response.status === 204) continue;
-    if (!response.ok) throw new EditorBridgeRequestError('cancellation poll', response.status);
+    if (!response.ok) {
+      const takenOver = response.status === 409 && await bridgeConflictTakenOver(response);
+      throw new EditorBridgeRequestError('cancellation poll', response.status, takenOver);
+    }
     const cancellation = parseCancellation(await response.json());
     if (cancellation.ownerGone?.length) {
       await runtime.discardOwnerSessions?.(cancellation.ownerGone);
@@ -223,15 +230,17 @@ async function pollRegisteredBridge(
   ]);
 }
 
+/** Returns true when the retry loop should STOP (this window yielded ownership). */
 async function runBridgeAttempt(
   projectId: string, editorInstanceId: string,
   runtime: ExternalBridgeRuntime, signal: AbortSignal,
   onError: (message: string | null) => void,
-): Promise<void> {
+): Promise<boolean> {
   const cancellations = new ExternalCallCancellationRegistry();
   const controller = new AbortController();
   const cancel = () => controller.abort(signal.reason);
   let ownership: BrowserProjectOwnership | undefined;
+  let stop = false;
   if (signal.aborted) controller.abort(signal.reason);
   else signal.addEventListener('abort', cancel, { once: true });
   try {
@@ -251,7 +260,7 @@ async function runBridgeAttempt(
       controller.signal,
     );
   } catch (error) {
-    handleExternalBridgeAttemptError(error, signal, onError);
+    stop = handleExternalBridgeAttemptError(error, signal, onError);
   } finally {
     controller.abort();
     signal.removeEventListener('abort', cancel);
@@ -262,6 +271,7 @@ async function runBridgeAttempt(
     );
     if (ownership) clearBrowserProjectOwnership(ownership);
   }
+  return stop;
 }
 
 async function runBridge(
@@ -272,7 +282,10 @@ async function runBridge(
 ): Promise<void> {
   const { editorInstanceId } = runtime.binding();
   while (!signal.aborted) {
-    await runBridgeAttempt(projectId, editorInstanceId, runtime, signal, onError);
+    // Yield the loop when another tab took over: re-registering here is what
+    // makes two tabs livelock (ping-pong ownership). The read-only notice stays.
+    const stop = await runBridgeAttempt(projectId, editorInstanceId, runtime, signal, onError);
+    if (stop) break;
     if (!signal.aborted) await retryDelay();
   }
 }

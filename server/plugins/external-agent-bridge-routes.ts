@@ -8,6 +8,7 @@ import type {
   nextEditorCancellation,
   editorCallBinding,
   editorRegistrationMatches,
+  editorRegistrationTakenOver,
   registerEditor,
   settleEditorCall,
   touchEditor,
@@ -42,6 +43,7 @@ function registrationCapability(req: IncomingMessage, required: boolean): string
 export interface BridgeOperations {
   claimBrowserOwnership: typeof claimBrowserProjectOwnership;
   editorRegistrationMatches: typeof editorRegistrationMatches;
+  editorRegistrationTakenOver: typeof editorRegistrationTakenOver;
   registerEditor: typeof registerEditor;
   unregisterEditor: typeof unregisterEditor;
   nextEditorCall: typeof nextEditorCall;
@@ -210,7 +212,10 @@ async function pollEditorCall(
   }
   const capability = registrationCapability(req, true);
   if (!operations.editorRegistrationMatches(projectId, editorId, capability)) {
-    sendBridgeJson(res, 409, { error: 'editor registration is stale or owned by another session' });
+    sendBridgeJson(res, 409, {
+      error: 'editor registration is stale or owned by another session',
+      takenOver: operations.editorRegistrationTakenOver(projectId, editorId),
+    });
     return;
   }
   const call = await operations.nextEditorCall(
@@ -237,7 +242,10 @@ async function pollEditorCancellation(
   if (!projectId || !editorId) throw new Error('projectId and editorId are required');
   const capability = registrationCapability(req, true);
   if (!operations.editorRegistrationMatches(projectId, editorId, capability)) {
-    sendBridgeJson(res, 409, { error: 'editor registration is stale or owned by another session' });
+    sendBridgeJson(res, 409, {
+      error: 'editor registration is stale or owned by another session',
+      takenOver: operations.editorRegistrationTakenOver(projectId, editorId),
+    });
     return;
   }
   const cancellation = await operations.nextEditorCancellation(

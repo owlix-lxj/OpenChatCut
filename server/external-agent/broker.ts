@@ -190,6 +190,14 @@ export function editorRegistrationMatches(
   return registry.registrationMatches(projectId, editorInstanceId, registrationCapability);
 }
 
+/** True when another window/tab now owns this project's editor registration
+ * (a different editor instance) — the caller should yield to it, not re-register. */
+export function editorRegistrationTakenOver(
+  projectId: string, editorInstanceId: string,
+): boolean {
+  return registry.registrationTakenOverBy(projectId, editorInstanceId);
+}
+
 export function unregisterEditor(
   projectId: string, editorInstanceId: string,
   registrationCapability?: string | null,

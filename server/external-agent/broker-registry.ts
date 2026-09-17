@@ -202,6 +202,19 @@ export class EditorConnectionRegistry {
     );
   }
 
+  /**
+   * True when a live registration exists for this project under a DIFFERENT
+   * editor instance — i.e. another window/tab has taken over ownership. This
+   * distinguishes a genuine takeover (the asking window should yield and go
+   * read-only instead of re-registering) from a transient same-window
+   * capability mismatch (safe to retry). Without this, two tabs on one project
+   * each re-register on the other's 409 and livelock (ping-pong takeovers).
+   */
+  registrationTakenOverBy(projectId: string, editorInstanceId: string): boolean {
+    const editor = this.editors.get(projectId);
+    return Boolean(editor && editor.editorInstanceId !== editorInstanceId);
+  }
+
   binding(projectId: string): EditorBinding | null {
     const editor = this.editors.get(projectId);
     return editor ? bindingOf(editor) : null;

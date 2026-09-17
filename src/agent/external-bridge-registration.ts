@@ -7,12 +7,27 @@ const EDITOR_REGISTRATION_CAPABILITY_HEADER = 'X-OpenChatCut-Editor-Registration
 export class EditorBridgeRequestError extends Error {
   readonly operation: string;
   readonly status: number;
+  /** For a 409: true when another window/tab has taken over this project's
+   * editor bridge. The retry loop yields (goes read-only) instead of
+   * re-registering, so two tabs converge on one owner rather than livelocking. */
+  readonly takenOver: boolean;
 
-  constructor(operation: string, status: number) {
+  constructor(operation: string, status: number, takenOver = false) {
     super(`${operation} failed: HTTP ${status}`);
     this.name = 'EditorBridgeRequestError';
     this.operation = operation;
     this.status = status;
+    this.takenOver = takenOver;
+  }
+}
+
+/** Reads the `takenOver` flag from a 409 bridge response body (best-effort). */
+export async function bridgeConflictTakenOver(response: Response): Promise<boolean> {
+  try {
+    const body: unknown = await response.clone().json();
+    return Boolean(body && typeof body === 'object' && (body as { takenOver?: unknown }).takenOver === true);
+  } catch {
+    return false;
   }
 }
 
