@@ -4,6 +4,7 @@ import { ratioLabel } from '../editor/types';
 import type { Tpl } from '../types';
 import { Icon } from '../components/icons';
 import { setLibraryDrag } from './drag';
+import { assetUrl } from '../assetUrl';
 
 interface TemplateCardProps {
   template: Tpl;
@@ -66,7 +67,7 @@ export const TemplateCard = memo(function TemplateCard({
               {portrait && (
                 <img
                   className="cc-template-thumb-backdrop"
-                  src={template.thumb}
+                  src={assetUrl(template.thumb)}
                   alt=""
                   aria-hidden
                   loading="lazy"
@@ -75,7 +76,7 @@ export const TemplateCard = memo(function TemplateCard({
               )}
               <img
                 className={`cc-template-thumb-image${portrait ? ' portrait' : ''}`}
-                src={template.thumb}
+                src={assetUrl(template.thumb)}
                 alt={tData(template.name)}
                 loading="lazy"
                 draggable={false}
