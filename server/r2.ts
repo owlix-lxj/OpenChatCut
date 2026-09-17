@@ -37,7 +37,7 @@ export function effectiveUploadMaxBytes(): number {
   return configuredUploadMaxBytes() ?? DEFAULT_UPLOAD_MAX_BYTES;
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes % (1024 ** 3) === 0 ? 0 : 1)}GB`;
   if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)}MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)}KB`;

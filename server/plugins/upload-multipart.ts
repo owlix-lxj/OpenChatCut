@@ -6,7 +6,7 @@ import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
-import { putUploadFile, r2Config, uploadObjectKey } from '../r2.ts';
+import { formatBytes, putUploadFile, r2Config, uploadObjectKey } from '../r2.ts';
 import { uploadDir } from '../media-dir.ts';
 import { maxUploadBytes } from './upload.ts';
 import { assembleHashedParts } from './upload-multipart-assembly.ts';
@@ -240,7 +240,7 @@ export function uploadMultipartPlugin(): Plugin {
           }
           const max = maxUploadBytes();
           if (size > max) {
-            sendError(res, 413, `file too large (max ${Math.round(max / (1024 ** 3))}GB)`);
+            sendError(res, 413, `file too large (max ${formatBytes(max)})`);
             return;
           }
           if (size > limits.maxBytes || usage.sessions + pendingSessions >= limits.maxSessions
