@@ -2,8 +2,22 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { editorCredentialAuthorized, trustedEditorRequest } from '../editor-auth.ts';
 import { MobileUploadService } from '../mobile-upload-service.ts';
+import { platformManaged } from '../platform-session.ts';
 import { putUploadFile } from '../r2.ts';
 import { maxUploadBytes } from './upload.ts';
+
+const PHONE_ROUTE = /^\/s\/[A-Za-z0-9_-]+(\/upload)?$/;
+
+/** The public origin (scheme://host) a phone should use to reach this editor,
+ * derived from the browser request that created the session. */
+function publicOriginOf(req: IncomingMessage): string | undefined {
+  const host = req.headers.host;
+  if (!host || /[/\\@?#,\s]/.test(host)) return undefined;
+  const proto = (Array.isArray(req.headers['x-forwarded-proto'])
+    ? req.headers['x-forwarded-proto'][0]
+    : req.headers['x-forwarded-proto'])?.trim().toLowerCase();
+  return `${proto === 'http' ? 'http' : 'https'}://${host}`;
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
@@ -12,7 +26,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-type MobileUploadControls = Pick<MobileUploadService, 'createSession' | 'getSession' | 'closeSession'>;
+type MobileUploadControls = Pick<MobileUploadService, 'createSession' | 'getSession' | 'closeSession' | 'handle'>;
 
 function mobilePageLocale(value: string | null): 'zh' | 'en' | 'it' | 'ru' {
   return value === 'en' || value === 'it' || value === 'ru' ? value : 'zh';
@@ -39,11 +53,20 @@ export async function handleMobileUploadControl(
   res: ServerResponse,
   service: MobileUploadControls,
 ): Promise<void> {
+  const phoneUrl = new URL(req.url ?? '/', 'http://localhost');
+  // Phone-facing routes authenticate via the unguessable session token in the
+  // path (validated in service.handle), not the editor credential — serve them
+  // before the editor-auth gate so a phone on any network can reach them.
+  if (PHONE_ROUTE.test(phoneUrl.pathname)) {
+    await service.handle(req, res);
+    return;
+  }
   if (!mobileUploadControlAuthorized(req, res)) return;
   try {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (req.method === 'POST' && url.pathname === '/sessions') {
-      sendJson(res, 201, await service.createSession(mobilePageLocale(url.searchParams.get('locale'))));
+      const origin = platformManaged() ? publicOriginOf(req) : undefined;
+      sendJson(res, 201, await service.createSession(mobilePageLocale(url.searchParams.get('locale')), origin));
       return;
     }
     const match = /^\/sessions\/([0-9a-f-]+)$/.exec(url.pathname);

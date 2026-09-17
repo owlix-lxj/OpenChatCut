@@ -15,6 +15,11 @@ export function requestShapeAllowed(req: IncomingMessage): boolean {
   const method = (req.method ?? 'GET').toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
   const url = new URL(req.url ?? '/', 'http://localhost');
+  // Phone-facing mobile-upload routes are authenticated by the unguessable,
+  // short-lived session token in the path (validated by the mobile-upload
+  // service). A phone is not the editor and carries no platform session, so it
+  // cannot pass the same-origin/session shape below — the token is its credential.
+  if (url.pathname.startsWith('/api/mobile-upload/s/')) return true;
   if (url.pathname.startsWith('/llm/') && internalLlmRequestAuthorized(req)) return true;
   if (url.pathname === '/api/external-mcp/mcp' && externalMcpAuthorized(req)) return true;
   // Upload slots carry a single-use, short-lived handoff token that the

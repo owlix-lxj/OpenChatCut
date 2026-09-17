@@ -107,4 +107,29 @@ try {
   await rm(tempDir, { recursive: true, force: true });
 }
 
+// Platform/cloud mode: a phone cannot reach the server's LAN IP, so createSession
+// with a public origin returns a public https URL routed via /api/mobile-upload/s/<token>
+// and needs no LAN address (no "no LAN IPv4" error, no separate LAN server).
+{
+  const platformDir = await mkdtemp(join(tmpdir(), 'openchatcut-mobile-platform-'));
+  const platform = new MobileUploadService({
+    addresses: () => [], // no LAN address available
+    uploadDirectory: () => platformDir,
+    maxBytes: 16,
+    sessionTtlMs: 2_000,
+  });
+  try {
+    const session = await platform.createSession('zh', 'https://admin.daost.cn');
+    assert.equal(session.urls.length, 1);
+    assert.match(
+      session.urls[0] ?? '',
+      /^https:\/\/admin\.daost\.cn\/api\/mobile-upload\/s\/[A-Za-z0-9_-]+$/,
+      'platform mode returns a public URL, not a LAN IP',
+    );
+  } finally {
+    await platform.stop();
+    await rm(platformDir, { recursive: true, force: true });
+  }
+}
+
 console.log('mobile-upload-service.verify: ok');

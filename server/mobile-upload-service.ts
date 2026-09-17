@@ -221,14 +221,25 @@ export class MobileUploadService {
     };
   }
 
-  async createSession(locale: MobilePageLocale = 'zh'): Promise<MobileUploadSessionSnapshot> {
-    const addresses = this.options.addresses();
-    if (addresses.length === 0) throw new Error('no LAN IPv4 address available');
-    await this.ensureServer();
+  async createSession(
+    locale: MobilePageLocale = 'zh',
+    publicOrigin?: string,
+  ): Promise<MobileUploadSessionSnapshot> {
     const id = randomUUID();
     const token = randomBytes(24).toString('base64url');
     const expiresAt = Date.now() + this.options.sessionTtlMs;
-    const urls = addresses.map((address) => `http://${address}:${this.port}/s/${token}`);
+    let urls: string[];
+    if (publicOrigin) {
+      // Platform/cloud mode: the phone cannot reach the server's LAN IP, so it
+      // connects over the public domain. This process's /api/mobile-upload/s/<token>
+      // routes (served via nginx) handle the page and upload — no LAN server.
+      urls = [`${publicOrigin}/api/mobile-upload/s/${token}`];
+    } else {
+      const addresses = this.options.addresses();
+      if (addresses.length === 0) throw new Error('no LAN IPv4 address available');
+      await this.ensureServer();
+      urls = addresses.map((address) => `http://${address}:${this.port}/s/${token}`);
+    }
     const timer = setTimeout(() => { void this.closeSession(id); }, this.options.sessionTtlMs);
     timer.unref();
     const session: MobileUploadSession = { id, token, locale, urls, expiresAt, files: [], closing: false, timer, activeUploads: new Set() };
@@ -299,7 +310,10 @@ export class MobileUploadService {
     return null;
   }
 
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  /** Serve a phone-facing request (page or upload). Public so the platform-mode
+   * plugin can route /api/mobile-upload/s/<token> here without a LAN server.
+   * Auth is the unguessable session token in the path, validated below. */
+  async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
       const match = /^\/s\/([A-Za-z0-9_-]+)(\/upload)?$/.exec(url.pathname);
