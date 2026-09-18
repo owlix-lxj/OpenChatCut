@@ -63,6 +63,10 @@ const hwAccelsCache = new Map<string, Promise<Set<string>>>();
 /** 平台感知的解码硬加速参数。软件编码必须使用系统内存帧；
  * 硬件编码器已知时使用匹配 API，否则按平台选择通用解码器。 */
 export function hwDecodeArgs(encoder?: H264Encoder): string[] {
+  // Servers without a real GPU device advertise a compiled hwaccel (e.g. vaapi) that then fails
+  // at runtime ("Hardware device setup failed", ffmpeg exit 187). OPENCHATCUT_FFMPEG_HWACCEL=0
+  // forces pure software decode on such hosts.
+  if (process.env.OPENCHATCUT_FFMPEG_HWACCEL === '0') return [];
   if (encoder === 'libx264') return [];
   if (encoder === 'h264_videotoolbox') return ['-hwaccel', 'videotoolbox'];
   if (encoder === 'h264_nvenc') return ['-hwaccel', 'cuda'];

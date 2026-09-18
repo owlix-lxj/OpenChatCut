@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import { rename, stat, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { isSafeUploadName, resolveUploadFile, uploadDir } from '../media-dir.ts';
+import { resolveUploadInput } from '../upload-input.ts';
 import { ffmpegBin, ffprobeBin } from '../media-binaries.ts';
 import { ffmpegThreadArgs, spawnMediaProcess } from '../media-process.ts';
 
@@ -187,11 +188,12 @@ export function extractAudioPlugin(): Plugin {
             sendJson(res, 400, { error: 'src must be /media/uploads/<safe-name>' });
             return;
           }
-          const inputPath = resolveUploadFile(name);
-          if (!inputPath) {
+          const resolvedInput = resolveUploadInput(name);
+          if (!resolvedInput) {
             sendJson(res, 404, { error: `media not found: ${name}` });
             return;
           }
+          const inputPath = resolvedInput.input;
           // Fast-fail sources without an audio track instead of letting ffmpeg
           // emit an opaque "output file does not contain any stream" error.
           const hasAudio = await probeHasAudio(inputPath);

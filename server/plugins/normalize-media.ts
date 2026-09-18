@@ -5,6 +5,7 @@ import { basename, extname, join } from 'node:path';
 import {
   isSafeUploadName, resolveUploadFile, resolveUploadReference, uploadDir,
 } from '../media-dir.ts';
+import { resolveUploadInput } from '../upload-input.ts';
 import {
   NormalizeAdmissionFullError,
   type NormalizeAdmission,
@@ -224,11 +225,12 @@ async function handleNormalizeRequest(
     sendJson(res, 400, { error: 'src must be /media/uploads/<safe-name>' });
     return;
   }
-  const inputPath = resolveUploadFile(name);
-  if (!inputPath) {
+  const resolvedInput = resolveUploadInput(name);
+  if (!resolvedInput) {
     sendJson(res, 404, { error: `media not found: ${name}` });
     return;
   }
+  const inputPath = resolvedInput.input;
   const extension = extname(name).toLowerCase();
   if (isPassthrough(name)) {
     sendJson(res, 200, { ok: true, path: src, normalized: false, reason: 'not a video master' });
