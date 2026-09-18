@@ -28,6 +28,10 @@ import { installDesktopInferenceIpc } from './native-inference-ipc.ts';
 import { detectDesktopHardwareProfile } from './native-hardware-profile.ts';
 import { installDirectoryWatchIpc } from './directory-watch-ipc.ts';
 import {
+  applyLoginTicket, consumeLoginCallback, deepLinkFromArgv, PLATFORM_LOGIN_PROTOCOL,
+  startPlatformLogin,
+} from './platform-login.ts';
+import {
   AGENT_IMPORT_ROOTS_KEY,
   importAgentPathsWithGrant,
 } from './agent-path-import.ts';
@@ -92,6 +96,26 @@ const SMOKE = process.env.CC_SMOKE === '1';
 const SMOKE_RENDER = process.env.CC_SMOKE_RENDER === '1';
 const SMOKE_TIMEOUT_MS = SMOKE_RENDER ? 240_000 : 90_000;
 let mainWindow: BrowserWindow | null = null;
+let currentOrigin: string | null = null;
+let pendingDeepLink: string | null = null;
+
+/** Handle an openchatcut:// deep link: on a valid login callback, load the editor with the launch
+ * ticket so the renderer exchanges it for a platform session. Links that arrive before the window
+ * is ready (cold start) are buffered and replayed once boot finishes. */
+function handlePlatformDeepLink(rawUrl: string): void {
+  if (!mainWindow || !currentOrigin) { pendingDeepLink = rawUrl; return; }
+  const result = consumeLoginCallback(rawUrl);
+  if (!result) return;
+  applyLoginTicket(mainWindow, currentOrigin, result.ticket);
+  focusExistingWindow(mainWindow);
+}
+
+// macOS delivers the deep link through this event (often before the window exists).
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handlePlatformDeepLink(url);
+});
+app.setAsDefaultProtocolClient(PLATFORM_LOGIN_PROTOCOL);
 
 type DesktopIpcHandler = Parameters<typeof ipcMain.handle>[1];
 
@@ -143,6 +167,11 @@ function installDesktopPageGuards(win: BrowserWindow, trustedOrigin: string): vo
 }
 
 function registerDesktopHandlers(trustedOrigin: string): void {
+  // Renderer "登录": open the platform login page in the system browser. The openchatcut://
+  // callback is handled by the app-level open-url / second-instance listeners.
+  ipcMain.handle('openchatcut:platform-login', trustedDesktopHandler(trustedOrigin, async () => {
+    await startPlatformLogin(shell.openExternal);
+  }));
   ipcMain.handle('openchatcut:select-directory', trustedDesktopHandler(trustedOrigin, async (event, requestedPath: unknown) => {
     const parent = BrowserWindow.fromWebContents(event.sender);
     const requested = typeof requestedPath === 'string' && isAbsolute(requestedPath)
@@ -349,6 +378,7 @@ async function boot(): Promise<void> {
     smoke: SMOKE,
   });
   const origin = devOrigin ?? (await startEmbeddedServer(DIST_DIR)).origin;
+  currentOrigin = origin;
   registerDesktopHandlers(origin);
   installProjectStoreIpc(origin);
   installEditorAuthIpc(origin);
@@ -441,6 +471,14 @@ async function boot(): Promise<void> {
   });
   await win.loadURL(`${origin}/`);
 
+  // Replay a deep link that arrived during startup (e.g. the app was focused by the callback
+  // before the window existed).
+  if (pendingDeepLink) {
+    const buffered = pendingDeepLink;
+    pendingDeepLink = null;
+    handlePlatformDeepLink(buffered);
+  }
+
   if (SMOKE) {
     await runDesktopSmokeProbe(origin, win, SMOKE_RENDER);
     console.log('SMOKE-OK');
@@ -456,7 +494,10 @@ if (!hasSingleInstanceLock) {
 } else {
   applyWindowsGpuCrashFallback(app);
   installWindowsGpuCrashRecovery(app, () => BrowserWindow.getAllWindows());
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    // Windows/Linux deliver the openchatcut:// deep link as an argument to the second instance.
+    const deepLink = deepLinkFromArgv(argv);
+    if (deepLink) handlePlatformDeepLink(deepLink);
     if (mainWindow) focusExistingWindow(mainWindow);
   });
 }

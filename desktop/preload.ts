@@ -86,6 +86,8 @@ export interface DesktopInferenceApi {
 export interface OpenChatCutDesktopApi {
   getPathForFile(file: File): string | undefined;
   platform: NodeJS.Platform;
+  /** Open the platform login page in the system browser (openchatcut:// callback completes login). */
+  platformLogin(): Promise<void>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   selectExportDirectory(): Promise<DesktopExportDirectoryGrant | null>;
   selectExportFile(suggestedFilename: string): Promise<DesktopExportFileGrant | null>;
@@ -135,6 +137,7 @@ async function invokeDesktopUpdate(
 
 const api: OpenChatCutDesktopApi = {
   getPathForFile: (file) => webUtils.getPathForFile(file) || undefined,
+  platformLogin: () => ipcRenderer.invoke('openchatcut:platform-login') as Promise<void>,
   platform: process.platform,
   selectDirectory: (defaultPath) =>
     ipcRenderer.invoke('openchatcut:select-directory', defaultPath) as Promise<string | null>,

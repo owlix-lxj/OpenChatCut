@@ -359,11 +359,18 @@ async function uploadFileViaPlatformOss(
   return location;
 }
 
+/** The desktop app keeps media local (embedded server on the user's machine), so it must not
+ * route uploads to the tenant OSS library the way the hosted web build does. */
+function isDesktopRuntime(): boolean {
+  return typeof window !== 'undefined'
+    && typeof (window as unknown as { openChatCutDesktop?: unknown }).openChatCutDesktop !== 'undefined';
+}
+
 export async function uploadFile(
   file: File,
   onProgress?: UploadProgress,
 ): Promise<UploadedMediaLocation> {
-  if (platformManagedClient()) {
+  if (platformManagedClient() && !isDesktopRuntime()) {
     const viaOss = await uploadFileViaPlatformOss(file, onProgress);
     if (viaOss) return viaOss;
     // Backend has not enabled OSS uploads yet — fall through to the standard path.
