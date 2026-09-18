@@ -3,7 +3,12 @@ import type { Plugin } from 'vite';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { isSafeUploadName, resolveUploadFile } from '../media-dir.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import { isSafeUploadName, resolveUploadFile, uploadDir } from '../media-dir.ts';
+import { registerOssReference } from '../oss-references.ts';
+import { DouyinResolveError, resolveDouyinShare } from '../douyin-resolver.ts';
+import { maxUploadBytes } from './upload-route-http.ts';
 import {
   clearPlatformSessionCookie,
   mintPlatformSession,
@@ -209,6 +214,105 @@ async function registerExport(req: IncomingMessage, res: ServerResponse): Promis
   }
 }
 
+const DOUYIN_VIDEO_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+  + 'Chrome/124.0.0.0 Safari/537.36';
+
+/**
+ * Import a Douyin share link as a tenant material: resolve the watermark-free URL, fetch the
+ * video server-side (Douyin needs a referer, so the browser cannot), stream it straight to the
+ * tenant OSS library (no local disk), register it as a material, and return the /media/uploads
+ * handle plus the caption (文案) for the caller to transcribe or display.
+ */
+async function importDouyin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const session = platformSession(req);
+  if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
+  if (req.method !== 'POST') { sendJson(res, 405, { error: 'method not allowed' }); return; }
+  try {
+    const body = await jsonBody(req);
+    const shareText = typeof body.shareText === 'string' ? body.shareText
+      : typeof body.url === 'string' ? body.url : '';
+    if (!shareText.trim()) { sendJson(res, 400, { error: 'shareText is required', code: 'invalid' }); return; }
+
+    const resolved = await resolveDouyinShare(shareText);
+    const videoResponse = await fetch(resolved.videoUrl, {
+      headers: { 'User-Agent': DOUYIN_VIDEO_UA, Referer: 'https://www.douyin.com/' },
+      redirect: 'follow',
+    });
+    if (!videoResponse.ok || !videoResponse.body) {
+      throw new DouyinResolveError('download', `无水印视频下载失败 HTTP ${videoResponse.status}`);
+    }
+
+    const contentType = 'video/mp4';
+    const maxBytes = maxUploadBytes();
+    const declared = Number(videoResponse.headers.get('content-length')) || 0;
+    if (declared > maxBytes) throw new DouyinResolveError('too_large', '视频超出大小上限');
+    const storedName = `${randomUUID()}.mp4`;
+    const credential = await signPlatformOssUpload(session.token, {
+      fileName: `${resolved.title}.mp4`, contentType, sizeBytes: declared,
+    });
+
+    const hash = createHash('sha256');
+    let bytes = 0;
+    const reader = videoResponse.body.getReader();
+    let putBody: BodyInit;
+    let putHeaders: Record<string, string>;
+    if (declared > 0) {
+      async function* streamed(): AsyncGenerator<Buffer> {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            bytes += value.length;
+            if (bytes > maxBytes) throw new DouyinResolveError('too_large', '视频超出大小上限');
+            hash.update(value);
+            yield Buffer.from(value);
+          }
+        }
+      }
+      putBody = Readable.from(streamed()) as unknown as BodyInit;
+      putHeaders = { 'Content-Type': contentType, 'Content-Length': String(declared) };
+    } else {
+      const chunks: Buffer[] = [];
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          bytes += value.length;
+          if (bytes > maxBytes) throw new DouyinResolveError('too_large', '视频超出大小上限');
+          hash.update(value);
+          chunks.push(Buffer.from(value));
+        }
+      }
+      putBody = Buffer.concat(chunks);
+      putHeaders = { 'Content-Type': contentType, 'Content-Length': String(bytes) };
+    }
+
+    const putResponse = await fetch(credential.uploadUrl, {
+      method: 'PUT', headers: putHeaders, body: putBody, duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+    if (!putResponse.ok) throw new DouyinResolveError('oss', `OSS 上传失败 HTTP ${putResponse.status}`);
+
+    const contentHash = hash.digest('hex');
+    await createPlatformMaterial(session.token, {
+      type: 'VIDEO', name: resolved.title, objectKey: credential.objectKey,
+      sourceUrl: credential.sourceUrl, mimeType: contentType, sizeBytes: bytes,
+    });
+    await registerOssReference(uploadDir(), storedName, {
+      sourceUrl: credential.sourceUrl, objectKey: credential.objectKey, bytes, contentType, contentHash,
+    });
+    sendJson(res, 201, {
+      ok: true, path: `/media/uploads/${storedName}`, name: resolved.title,
+      title: resolved.title, videoId: resolved.videoId, sourceUrl: credential.sourceUrl,
+      bytes, contentHash,
+    });
+  } catch (error) {
+    const code = error instanceof DouyinResolveError ? error.code : 'import_failed';
+    const status = code === 'invalid' ? 400 : 502;
+    sendJson(res, status, { error: error instanceof Error ? error.message : String(error), code });
+  }
+}
+
 export function platformIntegrationPlugin(): Plugin {
   return {
     name: 'openchatcut-platform-integration',
@@ -229,6 +333,7 @@ export function platformIntegrationPlugin(): Plugin {
       });
       server.middlewares.use('/api/platform/session', sessionInfo);
       server.middlewares.use('/api/platform/materials/export', (req, res) => { void registerExport(req, res); });
+      server.middlewares.use('/api/platform/import-douyin', (req, res) => { void importDouyin(req, res); });
       server.middlewares.use('/api/platform/materials', (req, res) => { void materials(req, res); });
     },
   };
