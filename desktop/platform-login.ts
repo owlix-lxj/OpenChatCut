@@ -10,7 +10,8 @@ import type { BrowserWindow } from 'electron';
 
 export const PLATFORM_LOGIN_PROTOCOL = 'openchatcut';
 
-const DEFAULT_LOGIN_URL = 'https://admin.daost.cn/openchatcut/desktop-login';
+// Served by the business admin SPA (a Vue route), NOT under /openchatcut/ which nginx maps to the editor.
+const DEFAULT_LOGIN_URL = 'https://admin.daost.cn/desktop-login';
 
 /** The platform's desktop-login landing page (overridable for staging). */
 export function platformLoginUrl(): string {
