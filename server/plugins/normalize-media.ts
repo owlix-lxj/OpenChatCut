@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { basename, extname, join } from 'node:path';
 import {
-  isSafeUploadName, resolveUploadFile, resolveUploadReference, uploadDir,
+  isSafeUploadName, resolveUploadReference, uploadDir,
 } from '../media-dir.ts';
 import { resolveUploadInput } from '../upload-input.ts';
 import {

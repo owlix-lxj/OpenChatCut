@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { rename, stat, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { isSafeUploadName, resolveUploadFile, uploadDir } from '../media-dir.ts';
+import { isSafeUploadName, uploadDir } from '../media-dir.ts';
 import { resolveUploadInput } from '../upload-input.ts';
 import { ffmpegBin, ffprobeBin } from '../media-binaries.ts';
 import { ffmpegThreadArgs, spawnMediaProcess } from '../media-process.ts';

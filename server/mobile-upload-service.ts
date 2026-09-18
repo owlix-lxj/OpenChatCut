@@ -446,7 +446,7 @@ export class MobileUploadService {
     while (headLen < 64) {
       const next = await reader.next();
       if (next.done) { drained = true; break; }
-      const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as ArrayBufferView);
+      const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as Uint8Array);
       buffered.push(chunk);
       headLen += chunk.length;
     }
@@ -468,7 +468,7 @@ export class MobileUploadService {
       }
       if (!drained) {
         for (let next = await reader.next(); !next.done; next = await reader.next()) {
-          const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as ArrayBufferView);
+          const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as Uint8Array);
           bytes += chunk.length;
           if (bytes > maxBytes) throw new UploadError(413, 'file too large');
           hash.update(chunk);
