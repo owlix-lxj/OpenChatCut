@@ -37,6 +37,7 @@ export function installSocialPublish(trustedOrigin: string, options: { bridgePor
   let transport: GeoPublishBridge | undefined;
   let embedded: { close(): void } | undefined;
   let starting: Promise<GeoPublishBridge> | undefined;
+  let unavailable: string | null = null;
   const loaded = readFile(statePath, 'utf8').then(raw => {
     const data: unknown = JSON.parse(raw);
     if (!Array.isArray(data)) throw new Error('发布记录格式损坏');
@@ -53,6 +54,7 @@ export function installSocialPublish(trustedOrigin: string, options: { bridgePor
 
   async function bridge(): Promise<GeoPublishBridge> {
     if (closed) throw new Error('应用正在退出');
+    if (unavailable) throw new Error(unavailable);
     if (transport) return transport;
     if (!starting) starting = (async () => {
       const token = GeoPublishBridge.createToken();
@@ -66,6 +68,10 @@ export function installSocialPublish(trustedOrigin: string, options: { bridgePor
         return instance;
       } catch (error) {
         await instance.close();
+        const message = error instanceof Error ? error.message : String(error);
+        if (/geo-embedded-runtime|GEO|ENOENT|missing/i.test(message)) {
+          unavailable = 'GEO 发布组件未打包，当前安装包不能检查抖音/小红书账号。请安装包含 GEO 运行时的新版本。';
+        }
         throw error;
       }
     })().finally(() => { starting = undefined; });
@@ -92,7 +98,14 @@ export function installSocialPublish(trustedOrigin: string, options: { bridgePor
       const result = await b.request<{ protocol?: number; implementation?: string; videoPlatforms?: unknown }>('aicut.capabilities', {}, 5000);
       if (result?.protocol !== 1 || result.implementation !== 'geo-wechatsync-2.0.9' || !Array.isArray(result.videoPlatforms)) throw new Error('平台连接组件版本不兼容，请重新构建开发版');
       return { connected: true, ready: true, detail: '平台连接已就绪', videoPlatforms: SOCIAL_PLATFORMS.map(p => p.id).filter(id => (result.videoPlatforms as unknown[]).includes(id)) };
-    } catch (error) { return { connected: transport?.isConnected() ?? false, ready: false, detail: error instanceof Error ? error.message : '桥接连接失败', videoPlatforms: [] }; }
+    } catch (error) {
+      return {
+        connected: transport?.isConnected() ?? false,
+        ready: false,
+        detail: unavailable ?? (error instanceof Error ? error.message : '桥接连接失败'),
+        videoPlatforms: [],
+      };
+    }
   }
   async function requireReady(platform?: SocialPlatform) {
     const status = await capabilities();
@@ -178,7 +191,11 @@ export function installSocialPublish(trustedOrigin: string, options: { bridgePor
       const status = await capabilities();
       if (status.ready) await Promise.all(SOCIAL_PLATFORMS.map(p => refreshAccount(p.id)));
       return { jobs: jobs.map(j => ({ ...j })), bridge: status,
-        accounts: SOCIAL_PLATFORMS.map(p => accounts.get(p.id) ?? { platform: p.id, state: 'unchecked', windowOpen: false }),
+        accounts: SOCIAL_PLATFORMS.map(p => accounts.get(p.id) ?? (
+          status.ready
+            ? { platform: p.id, state: 'unchecked', windowOpen: false }
+            : { platform: p.id, state: 'error', windowOpen: false, detail: status.detail }
+        )),
       } satisfies PublishSnapshot;
     }
     if (r.action === 'connect') { const id = socialPlatform(r.platform).id; await (await requireReady()).request('aicut.openAccount', { platform: id }); checked.delete(id); return; }

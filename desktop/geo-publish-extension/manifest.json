@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "AI-cut · GEO 发布桥接（开发版）",
+  "description": "基于 GEO 文章同步助手的本机发布桥接；账号保留在浏览器中。",
+  "version": "2.0.9",
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+  "action": {
+    "default_icon": "assets/icon-48.png",
+    "default_popup": "aicut-options.html"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "cookies",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "scripting",
+    "tabs",
+    "alarms",
+    "contextMenus",
+    "downloads",
+    "debugger"
+  ],
+  "host_permissions": [
+    "https://*.douyin.com/*",
+    "https://*.xiaohongshu.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "116",
+  "options_ui": {
+    "page": "aicut-options.html",
+    "open_in_tab": true
+  }
+}

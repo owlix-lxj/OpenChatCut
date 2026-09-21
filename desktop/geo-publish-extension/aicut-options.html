@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI-cut · 浏览器配对</title><link rel="stylesheet" href="aicut-options.css"></head>
+<body><main><h1>连接 AI-cut</h1>
+<p>使用 GEO 桥接插件读取当前浏览器的发布账号。账号登录信息留在浏览器中。</p>
+<form id="pair-form"><label for="pair-url">本机配对地址</label>
+<input id="pair-url" type="password" required autocomplete="off" spellcheck="false" placeholder="从 AI-cut 的发布面板复制">
+<p class="hint">配对地址包含连接凭据，请勿分享。仅接受本机 127.0.0.1 地址。</p>
+<div class="actions"><button type="submit">连接应用</button><button type="button" id="unpair">解除配对</button></div></form>
+<p id="status" role="status" aria-live="polite">正在检查连接…</p>
+<p>配对不代表账号已登录。请在发布面板中打开对应平台，完成登录后刷新账号状态。</p>
+</main><script type="module" src="aicut-options.mjs"></script></body></html>

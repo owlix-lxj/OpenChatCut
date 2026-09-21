@@ -1,12 +1,34 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir, cp, realpath } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = await realpath(process.env.GEO_EXTENSION_SOURCE || '/Users/lxj/GEO-local/GEO/apps/wechatsync-extension-dist');
 const output = resolve(here, '../desktop-dist/geo-publish-extension');
+const bundled = resolve(here, 'geo-publish-extension');
+const bundledRuntime = resolve(here, 'geo-embedded-runtime.js');
+const requestedSource = process.env.GEO_EXTENSION_SOURCE?.trim();
+const defaultSource = '/Users/lxj/GEO-local/GEO/apps/wechatsync-extension-dist';
+let source = null;
+try {
+  source = await realpath(requestedSource || defaultSource);
+} catch {
+  // Public checkouts do not contain the private GEO workspace. A pinned,
+  // reviewed export is kept in this repository so release builds remain
+  // reproducible without that machine-local path.
+}
+if (!source) {
+  if (!existsSync(bundled) || !existsSync(bundledRuntime)) {
+    throw new Error('GEO runtime missing. Set GEO_EXTENSION_SOURCE to wechatsync-extension-dist or restore desktop/geo-publish-extension and desktop/geo-embedded-runtime.js.');
+  }
+  await mkdir(output, { recursive: true });
+  await cp(bundled, output, { recursive: true });
+  await cp(bundledRuntime, resolve(here, '../desktop-dist/geo-embedded-runtime.js'));
+  console.log(`GEO pinned runtime: ${output}`);
+  process.exit(0);
+}
 const coreName = 'assets/index.ts-Bw-475TG.js';
 const expected = 'c1b0bcd91b72305d173bb6fa526d93002d01ab7bf011fbeb7bb6ad60b8b433ce';
 const core = await readFile(join(source, coreName), 'utf8');

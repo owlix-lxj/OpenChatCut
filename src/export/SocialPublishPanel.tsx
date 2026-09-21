@@ -79,7 +79,7 @@ export function SocialPublishPanel({ projectName }: { projectName: string }) {
     <div className="cc-export-main-header"><div><h3>保存到平台草稿</h3><p>选择视频 → 上传 → 核对并保存草稿，不自动发布</p></div></div>
     <div className="cc-publish-scroll">
       {!api ? <p role="status">此功能需要新版 AI-cut 桌面端。请完成开发版构建并重启应用。</p> : <>
-        {!snapshot.bridge?.ready && <p role="status">平台连接暂未就绪，请稍候…</p>}
+        {!snapshot.bridge?.ready && <p role="status">平台连接暂未就绪，请重新安装包含发布组件的新版 AI-cut。</p>}
         <section aria-label="发布账号" className="cc-publish-section">
           <h4>1. 选择平台与账号</h4>
           <p>在应用内登录平台，已有登录会话会保留。账号信息会自动刷新，也可点击「刷新状态」。</p>

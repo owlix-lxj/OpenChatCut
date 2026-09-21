@@ -79,7 +79,7 @@
     "desktop:notarize:mac": "node scripts/notarize-mac.mjs release",
     "desktop:prepare": "tsx desktop/prepare-target.mts",
     "desktop:dist:mac-x64": "npm run build && npm run desktop:build:main && npm run desktop:prebundle && tsx desktop/prepare-target.mts darwin-x64 && CC_EB_TARGET=darwin-x64 electron-builder --config config/electron-builder.config.mjs --mac --x64 --publish never",
-    "desktop:dist:win": "npm run build && npm run desktop:build:main && npm run desktop:prebundle && tsx desktop/prepare-target.mts win32-x64 && node -e \"const {spawnSync}=require('node:child_process');const result=spawnSync(process.execPath,['node_modules/electron-builder/cli.js','--config','config/electron-builder.config.mjs','--win','nsis','--x64','--publish','never'],{stdio:'inherit',env:{...process.env,CC_EB_TARGET:'win32-x64'}});if(result.error)throw result.error;process.exit(result.status??1)\"",
+    "desktop:dist:win": "node scripts/desktop-dist-win.mjs",
     "desktop:dist:linux": "npm run build && npm run desktop:build:main && npm run desktop:prebundle && tsx desktop/prepare-target.mts linux-x64 && CC_EB_TARGET=linux-x64 electron-builder --config config/electron-builder.config.mjs --linux AppImage --x64 --publish never",
     "verify:shortcuts": "tsx src/shortcuts/catalog.verify.ts && tsx src/shortcuts/keymap.verify.ts && tsx src/shortcuts/shortcutScope.verify.ts && tsx src/shortcuts/native-copy.verify.ts",
     "verify:i18n": "node scripts/check-i18n.mjs && tsx src/i18n/locale.verify.ts && tsx src/i18n/dict/it/settingsCoverage.verify.ts && tsx src/i18n/dict/it/mediaCoverage.verify.ts && tsx src/components/settings/transcription-language.verify.ts",

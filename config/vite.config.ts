@@ -107,7 +107,11 @@ export default defineConfig(({ mode }) => {
   // takes effect on the next request with no restart. The `const`s below are only the
   // startup snapshot for the `define` (initial agent capability manifest).
   seedKeystore(env);
-  const platformManaged = isPlatformManagedValue(env[PLATFORM_MODE_ENV]);
+  // Desktop distribution is allowed to inject the deployment mode through the
+  // process environment. `loadEnv` can otherwise let an old `.env.local`
+  // value (often an empty local-mode value) win during a release build.
+  const configuredPlatformMode = process.env[PLATFORM_MODE_ENV] ?? env[PLATFORM_MODE_ENV];
+  const platformManaged = isPlatformManagedValue(configuredPlatformMode);
   const base = env.OPENCHATCUT_BASE?.trim() || '/';
   const aaiKey = env.ASSEMBLYAI_API_KEY || '';
   const imageKey = env.IMAGE_API_KEY || env.OPENAI_API_KEY || env.LLM_OPENAI_API_KEY || '';

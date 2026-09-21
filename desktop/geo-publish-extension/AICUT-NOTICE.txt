@@ -1,0 +1,7 @@
+Development integration of the local GEO Wechatsync 2.0.9 extension.
+Source: pinned reviewed GEO/Wechatsync 2.0.9 export
+Core SHA-256: c1b0bcd91b72305d173bb6fa526d93002d01ab7bf011fbeb7bb6ad60b8b433ce
+Upstream: https://github.com/wechatsync/Wechatsync (GPL-3.0)
+AI-cut adds a pinned export/message boundary, removes automatic telemetry/update/auth scans and marketing tabs, and redacts connection URLs from logging.
+AI-cut additions: runtime.mjs and aicut-options.*. Original GEO files are not modified.
+Not a release distribution. Retain upstream licenses and corresponding source before distributing.

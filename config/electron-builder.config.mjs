@@ -99,6 +99,11 @@ export default {
     'desktop-dist/main.mjs',
     'desktop-dist/app-main.mjs',
     'desktop-dist/preload.cjs',
+    // GEO/Wechatsync is loaded by the embedded publisher at runtime. Keep the
+    // generated extension and host bundle in the packaged app; omitting these
+    // files leaves the UI stuck on account checking forever.
+    'desktop-dist/geo-embedded-runtime.js',
+    'desktop-dist/geo-publish-extension/**',
     ...nativeInferenceWorkers,
     'package.json',
     // Keep only the target compositor; renderer selects its package from process.platform at runtime.
