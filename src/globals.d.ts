@@ -8,11 +8,6 @@ declare const __CONFIGURED_CAPS__: Record<string, boolean> | undefined;
 declare const __APP_VERSION__: string | undefined;
 declare const __PLATFORM_MANAGED__: boolean | undefined;
 
-declare module '*.frag?raw' {
-  const source: string;
-  export default source;
-}
-
 declare module '*.png' {
   const url: string;
   export default url;

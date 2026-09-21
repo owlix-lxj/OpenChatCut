@@ -3,8 +3,8 @@ import { mkdtemp, mkdir, writeFile, rm, realpath, symlink } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { seedKeystore } from '../server/keystore.ts';
-import { browseLocalMedia } from './agent-local-media.ts';
-import { resolveAgentMediaPath } from './agent-path-import.ts';
+import { browseLocalMedia } from '../server/agent-local-media.ts';
+import { resolveAgentMediaPath } from '../server/local-path-import.ts';
 import { isAgentLocalMediaRequest } from '../shared/agent-local-media.ts';
 
 const fixture = await mkdtemp(join(tmpdir(), 'occ-local-media-'));

@@ -1,4 +1,6 @@
 const overrides: Record<string, string> = {
+  '选择 Fal.ai 作为默认厂商，然后选择模型。聊天中指定的模型优先于此默认值。': 'Seleziona Fal.ai come fornitore predefinito, quindi scegli un modello. Un modello richiesto esplicitamente in chat ha la precedenza su questa impostazione.',
+
   '当前版本号：{version}': 'Versione corrente: {version}',
   '检查更新': 'Controlla aggiornamenti',
   '检查中…': 'Controllo...',
@@ -104,6 +106,7 @@ const overrides: Record<string, string> = {
   '每个厂商独立保存地址、密钥与模型。先测试连接，成功后可从接口返回的模型中选择。': 'Ogni provider salva endpoint, chiave e modello separatamente. Testa la connessione, poi scegli tra i modelli restituiti dall’API.',
   '填写完整 API 前缀；可使用官方地址、自建网关或兼容中转。': 'Inserisci il prefisso API completo. Puoi usare endpoint ufficiali, gateway personali o relay compatibili.',
   '测试连接后可直接选择接口返回的模型，也可以手动填写模型 ID。': 'Dopo il test puoi scegliere un modello restituito dall’API o inserire manualmente un ID modello.',
+  '也可以手动填写厂商的其它模型 ID，建议列表仅为常用模型。': 'Puoi anche inserire manualmente un altro ID modello di questo provider; l’elenco suggerito copre solo i modelli più comuni.',
   '选择服务实际支持的协议；OpenAI 使用 Responses API，兼容服务使用 Chat Completions API。': 'Scegli il protocollo realmente supportato dal servizio. OpenAI usa Responses API; i servizi compatibili usano Chat Completions.',
   'MiniMax 同一个 Key，配置一次全能力（生图 / 配音 / 视频 / 音乐）通用。': 'Una sola chiave MiniMax copre immagini, voce, video e musica.',
   'Key 同时用于音效生成（submit_sound）。': 'La chiave viene usata anche per generare effetti sonori (submit_sound).',
@@ -189,6 +192,30 @@ const overrides: Record<string, string> = {
   '复制失败': 'Copia non riuscita',
   'Codex 返回了无效的登录地址。': 'Codex ha restituito un URL di accesso non valido.',
   'Codex 返回了无效的验证地址。': 'Codex ha restituito un URL di verifica non valido.',
+
+  '内置 Agent 可使用 Anthropic API Key，也可以在下方「Anthropic · Claude Code」页用 Claude 订阅登录（无需 API Key）。独立运行的 Claude Code 会话也可以通过「外部 Agent 接入 (MCP)」驱动 OpenChatCut。':
+    'L’Agent integrato puo usare una API Key Anthropic, oppure accedere con un abbonamento Claude nella pagina “Anthropic · Claude Code” qui sotto (senza API Key). Una sessione Claude Code autonoma puo anche pilotare OpenChatCut tramite “Agenti esterni (MCP)”.',
+  '使用 Claude 订阅登录，由官方 Claude Code CLI 管理凭据、续期与退出，OpenChatCut 不会读取或显示 OAuth 凭据。在终端运行 claude auth login（或 claude setup-token 获取长期令牌）完成登录后，点击“重新检测”。':
+    'Accedi con un abbonamento Claude. La CLI ufficiale Claude Code gestisce credenziali, rinnovo e logout; OpenChatCut non legge ne mostra credenziali OAuth. Esegui claude auth login (o claude setup-token per un token a lungo termine) nel terminale, poi fai clic su “Ricontrolla”.',
+  'Claude Code 模型': 'Modello Claude Code',
+  'Claude Code 默认模型': 'Modello Claude Code predefinito',
+  '登录后可从可用模型中选择，也可以手动填写别名（如 sonnet / opus / haiku）。':
+    'Dopo l’accesso puoi scegliere tra i modelli disponibili o inserire manualmente un alias (es. sonnet / opus / haiku).',
+  '正在检查 Claude Code CLI…': 'Controllo Claude Code CLI...',
+  '正在读取本机 Claude Code 运行时状态。': 'Lettura stato runtime Claude Code locale.',
+  '未检测到 Claude Code CLI': 'Claude Code CLI non rilevata',
+  '请先安装官方 Claude Code CLI，然后刷新状态。': 'Installa la Claude Code CLI ufficiale, poi aggiorna lo stato.',
+  '尚未登录 Claude': 'Accesso Claude non effettuato',
+  '在终端完成登录后点击“重新检测”。': 'Dopo aver effettuato l’accesso dal terminale, fai clic su “Ricontrolla”.',
+  '已登录 Claude': 'Accesso Claude effettuato',
+  '凭据与续期均由 Claude Code CLI 管理。': 'Credenziali e rinnovo sono gestiti dalla Claude Code CLI.',
+  'Claude Code 暂时不可用': 'Claude Code temporaneamente non disponibile',
+  '无法连接 Claude Code 服务，请确认开发服务正在运行。':
+    'Impossibile raggiungere il servizio Claude Code. Verifica che il servizio dev sia in esecuzione.',
+  '无法读取 Claude Code 模型，请稍后重试。': 'Impossibile leggere i modelli Claude Code. Riprova piu tardi.',
+  '重新检测': 'Ricontrolla',
+  '登录': 'Accedi',
+  '长期令牌': 'Token a lungo termine',
 
   '已配置': 'Configurato',
   '未配置': 'Non configurato',
@@ -287,6 +314,12 @@ const overrides: Record<string, string> = {
   'Streamable HTTP · 与内置 Agent 共享编辑工具': 'HTTP streamable · strumenti di modifica condivisi con l’Agent integrato',
   '写入 ~/.cursor/mcp.json 的全局配置。': 'Scrive la configurazione globale in ~/.cursor/mcp.json.',
   '写入 ~/.gemini/antigravity/mcp_config.json。': 'Scrive in ~/.gemini/antigravity/mcp_config.json.',
+  '写入 ~/.qoder/settings.json，国内版同时写 ~/.qoder-cn。': 'Scrive ~/.qoder/settings.json, e anche ~/.qoder-cn per la versione cinese.',
+  '千问办公': 'Qwen Work',
+  '自定义 MCP 只存在应用内，复制 JSON 后在连接器里粘贴。': 'I server MCP personalizzati restano nell’app: copia questo JSON e incollalo nel connettore.',
+  '复制配置': 'Copia configurazione',
+  '配置已复制，粘贴到客户端的自定义 MCP 输入框。': 'Configurazione copiata; incollala nel campo MCP personalizzato del client.',
+  '复制失败，请手动选择配置文本。': 'Copia non riuscita; seleziona manualmente il testo della configurazione.',
   '写入配置文件失败。': 'Scrittura del file di configurazione non riuscita.',
   '已写入 {paths}': 'Scritto in {paths}',
   '已连接': 'Connesso',

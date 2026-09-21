@@ -1,5 +1,6 @@
 export const GENERATE_WORKFLOW = `
 ## AI image generation
+- When Fal.ai is selected or explicitly requested, use model=fal and the requested falModel (or saved Fal image default from capabilities). If neither is set, ask which Fal model to use. Follow the catalog limits instead of native-provider defaults.
 - Use submit_image only after the user explicitly asks to generate an image.
 - Default model gpt-image-2; use nano-banana for reference-heavy work; image-01 (MiniMax) for stills without references (prompt ≤1500 chars, count ≤9, no referenceAssetIds; optional promptOptimizer).
 - Always provide a short descriptive name. Default aspectRatio 16:9, imageSize 1K, quality high, and count 1 (imageSize/quality are gpt-image-2-oriented).
@@ -29,6 +30,7 @@ export const GENERATE_WORKFLOW = `
 - submit_music returns immediately with a jobId. Call track_progress target=generation with action=status or action=wait; only a successful tracked result creates the media-pool audio asset.
 
 ## Video generation
+- When Fal.ai is selected or explicitly requested, use model=fal and the requested falModel (or saved Fal video default from capabilities). If neither is set, ask which Fal model to use; never silently pick Seedance for Fal. Follow catalog duration/resolution defaults rather than the native-provider defaults below.
 - Use submit_video only after an explicit video-generation request. Default to seedance2 when configured, 5 seconds, 16:9, and 720p; never silently add variants, duration, or quality.
 - For a digital human / talking photo, use submit_video with model=jimeng-avatar, exactly one firstFrame image and exactly one refAudios audio asset; do not use ordinary text-to-video. The audio must already exist in the project or be prepared by submit_voice, and must be 15 seconds or less.
 - For a recognizable real person, ask for explicit likeness consent immediately before submission and pass likenessConsent=true only after the user confirms: “我确认拥有该肖像，或已获得创建和使用该数字人形象的授权，并承诺不将其用于冒充他人、欺诈或其他违法用途。” Never infer consent from an upload or project ownership.

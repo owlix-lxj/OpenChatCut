@@ -7,7 +7,7 @@ import {
   type AgentLocalMediaEntry,
   type AgentLocalMediaResult,
 } from '../shared/agent-local-media.ts';
-import { resolveAgentMediaPath } from './agent-path-import.ts';
+import { resolveAgentMediaPath } from './local-path-import.ts';
 import { directoryMediaKind } from './directory-watch-import.ts';
 
 export async function browseLocalMedia(request: unknown): Promise<AgentLocalMediaResult> {

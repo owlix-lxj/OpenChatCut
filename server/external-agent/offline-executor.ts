@@ -15,6 +15,59 @@ import { execTimelineImportTool } from '../../src/agent/tools/timeline-import-to
 type Args = Record<string, unknown>;
 
 /**
+ * edit_item and manage_effects validate against the GL catalogs, which import
+ * shader sources with Vite's `?raw` suffix. Hosts that can resolve that — vite
+ * dev, the desktop bundle (scripts/esbuild-raw-plugin.mjs) and the CLI
+ * (cli/raw-hooks.mjs) — run them; a bare tsx host cannot load the module at all,
+ * so the import stays lazy and only a real call pays for it. Same pattern as
+ * src/agent/tools/shader-tools.ts.
+ */
+async function executeGlBackedTool(name: string, args: Args, ctx: AgentContext): Promise<unknown> {
+  if (name === 'edit_item') {
+    const { execEditItemTool } = await import('../../src/agent/tools/edit-item-tools.js');
+    return execEditItemTool(name, args, ctx);
+  }
+  const { execEffectTool } = await import('../../src/agent/tools/effect-tools.js');
+  return execEffectTool(name, args, ctx);
+}
+
+const CATALOG_TOOL_NAMES: Record<string, true> = {
+  list_templates: true,
+  search_templates: true,
+  add_motion_graphic: true,
+  list_audio: true,
+  add_audio: true,
+  browse_library: true,
+};
+
+const PATH_IMPORT_TOOL_NAMES: Record<string, true> = {
+  import_asset: true,
+  import_assets: true,
+  import_folder: true,
+};
+
+/**
+ * Catalog-driven tools. Loaded lazily for the same reason as the GL-backed pair:
+ * core-tools pulls the template sandbox and the model client, which the desktop
+ * server bundle has no other reason to carry until one of these is called.
+ */
+async function executeCatalogTool(name: string, args: Args, ctx: AgentContext): Promise<unknown> {
+  if (name === 'list_audio' || name === 'add_audio') {
+    const { execAudioAssetTool } = await import('../../src/agent/tools/audio-asset-tools.js');
+    return execAudioAssetTool(name, args, ctx);
+  }
+  if (name === 'browse_library') {
+    const { execLibraryTool } = await import('../../src/agent/tools/library-tools.js');
+    return execLibraryTool(name, args, ctx);
+  }
+  const [{ execCoreTool }, { offlineExternalToolSchemas }] = await Promise.all([
+    import('../../src/agent/tools/core-tools.js'),
+    import('./offline-tools.js'),
+  ]);
+  return execCoreTool(name, args, ctx, offlineExternalToolSchemas());
+}
+
+/**
  * Execute only the dependency-closed tools reviewed for server-side EditorCore use.
  * This separate dispatch keeps GL, media, network, IndexedDB, generation, and
  * render modules out of the desktop server bundle.
@@ -24,6 +77,23 @@ export async function executeOfflineTool(
   args: Args,
   ctx: AgentContext,
 ): Promise<unknown> {
+  if (name === 'edit_item' || name === 'manage_effects') return executeGlBackedTool(name, args, ctx);
+  if (CATALOG_TOOL_NAMES[name] === true) return executeCatalogTool(name, args, ctx);
+  if (PATH_IMPORT_TOOL_NAMES[name] === true) {
+    const { executeOfflinePathImport } = await import('./offline-path-import.js');
+    return executeOfflinePathImport(name, args, ctx);
+  }
+  if (name === 'browse_local_media') {
+    const [{ browseLocalMediaResult }, { browseLocalMedia }] = await Promise.all([
+      import('../../src/agent/tools/agent-path-import-tools.js'),
+      import('../agent-local-media.js'),
+    ]);
+    return browseLocalMediaResult(name, args, { browseLocalMedia });
+  }
+  if (name === 'export_jianying_draft') {
+    const { executeOfflineJianyingExport } = await import('./offline-jianying-export.js');
+    return executeOfflineJianyingExport(name, args, ctx);
+  }
   if (name === 'read_agent_artifact') return execAgentRuntimeTool(name, args, ctx);
   if (CORE_DATA_TOOL_NAMES.has(name)) return execCoreDataTool(name, args, ctx);
   if (name === 'manage_timelines') return execTimelineTool(name, args, ctx);

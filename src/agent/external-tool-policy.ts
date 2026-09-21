@@ -20,6 +20,9 @@ const DRAFT_EDIT_TOOL_NAMES = new Set([
   'manage_design_style',
   'import_timeline',
   'export_jianying_draft',
+  // Local-path media import lands assets in the session's pool; the file copy
+  // itself is a library write, reviewed in offline-tool-authorization.ts.
+  'import_asset', 'import_assets', 'import_folder',
 ]);
 
 const SERVER_DIRECT_READ_TOOL_NAMES: Record<string, true> = {
@@ -30,6 +33,17 @@ const SERVER_DIRECT_READ_TOOL_NAMES: Record<string, true> = {
   read_project: true,
   read_transcript: true,
   find_transcript: true,
+  // Catalog reads: bundled templates, the built-in audio library (plus the
+  // project's own audio assets) and the built-in library index. They need the
+  // offline editor context to carry those catalogs — server/external-agent/
+  // offline-catalogs.ts does, from the same modules the renderer uses.
+  list_templates: true,
+  search_templates: true,
+  list_audio: true,
+  browse_library: true,
+  // Local media discovery: the same core the desktop app browses with, gated by
+  // AGENT_IMPORT_ROOTS like the import tools below.
+  browse_local_media: true,
 };
 
 const SERVER_DIRECT_EDIT_TOOL_NAMES: Record<string, true> = {
@@ -48,6 +62,28 @@ const SERVER_DIRECT_EDIT_TOOL_NAMES: Record<string, true> = {
   update_watermark: true,
   manage_markers: true,
   import_timeline: true,
+  // Reviewed for server-side execution: both run against the draft's EditorCore
+  // commands with state/doc only. Their GL catalogs import shaders with Vite's
+  // `?raw` suffix, which the CLI host now resolves (cli/raw-hooks.mjs) and the
+  // desktop bundle resolves through scripts/esbuild-raw-plugin.mjs; the review
+  // for these two lives in the commit that added them.
+  edit_item: true,
+  manage_effects: true,
+  // Catalog-driven adds: a bundled template or a built-in audio asset placed on a
+  // track through the draft's commands. Plugin-pack templates are not part of the
+  // headless catalog, so those adds fail explicitly.
+  add_motion_graphic: true,
+  add_audio: true,
+  // Local-path media import (desktop agent tools until now). Reviewed for
+  // headless execution: the importer is the same core the desktop main process
+  // runs, it copies into the media library and lands pool assets in the session
+  // draft, and reachable paths are gated by the AGENT_IMPORT_ROOTS keystore key.
+  import_asset: true,
+  import_assets: true,
+  import_folder: true,
+  // Draft export writes into the CapCut/JianYing store through capcut-cli; it
+  // touches no project state, so no draft commit is involved.
+  export_jianying_draft: true,
 };
 
 const SERVER_DIRECT_BROWSER_ACTIONS: Record<string, true> = {
