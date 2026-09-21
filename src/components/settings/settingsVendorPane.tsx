@@ -9,6 +9,9 @@ import type { CodexAgentModel } from '../../../shared/codex-agent';
 import type { CodexSettingsController } from './useCodexSettings';
 import { copilotReasoningOptions } from './copilotReasoning';
 import type { CopilotSettingsController } from './useCopilotSettings';
+import type { ClaudeCodeSettingsController } from './useClaudeCodeSettings';
+import { ClaudeCodeVendorPane } from './ClaudeCodeVendorPane';
+import { FalModelNote } from './FalModelNote';
 import { shouldRenderModelPicker } from './codexReasoning';
 import { llmProviderConfigNames, normalizeLlmProvider } from '../../../shared/llm-providers';
 import { MODEL_CAPABILITY_OVERRIDES_KEY } from '../../../shared/model-capabilities';
@@ -44,6 +47,7 @@ export interface FieldCtx {
   onModelsDiscovered: (name: string, models: readonly string[]) => void;
   codex: CodexSettingsController;
   copilot: CopilotSettingsController;
+  claudeCode: ClaudeCodeSettingsController;
   /** Re-read /api/keys and push the result to the agent runtime (used by connection-style pages after login/logout). */
   refreshStatus: () => Promise<void>;
 }
@@ -75,6 +79,13 @@ export function VendorPane({ page, hint, ctx }: {
       {page.fields.map((field) => <FieldRow key={field.name} field={field} ctx={ctx} />)}
     </CopilotVendorPane>
   );
+  if (page.connection === 'claude-code') return (
+    <ClaudeCodeVendorPane page={page} hint={hint} ctx={ctx}
+      rawOverrides={capabilityOverridesValue(ctx)}
+      onOverridesChange={(value) => ctx.onStage(CAPABILITY_OVERRIDE_FIELD, value)}>
+      {page.fields.map((field) => <FieldRow key={field.name} field={field} ctx={ctx} />)}
+    </ClaudeCodeVendorPane>
+  );
   if (page.connection === 'xai-oauth') return <XaiOauthVendorPane page={page} hint={hint} ctx={ctx} />;
   if (page.key === 'llm/vision') return <VisionModelPane />;
   if (page.kind === 'local-models') return <LocalModelsPane page={page} fields={page.fields} ctx={ctx} />;
@@ -97,6 +108,7 @@ export function VendorPane({ page, hint, ctx }: {
         )}
         {page.note && <div style={pageNote}>{t(page.note)}</div>}
         {page.noteAction && <SettingsNoteAction config={page.noteAction} />}
+        <FalModelNote page={page} status={ctx.status} values={ctx.values} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: page.note ? 9 : 0 }}>
           {page.fields.map((f) => <FieldRow key={f.name} field={f} ctx={ctx} />)}
         </div>

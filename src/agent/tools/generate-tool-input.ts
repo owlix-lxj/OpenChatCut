@@ -26,7 +26,7 @@ export function buildSubmitImageArgs(args: GenerateArgs): SubmitImageArgs {
   const width = aspectRatio === undefined ? num(args.width) : undefined;
   const height = aspectRatio === undefined ? num(args.height) : undefined;
   const shared: SubmitImageArgs = {
-    model, prompt: String(args.prompt ?? ''), name: String(args.name ?? ''), aspectRatio,
+    model, falModel: str(args.falModel), prompt: String(args.prompt ?? ''), name: String(args.name ?? ''), aspectRatio,
     referenceAssetIds: references, count: num(args.count),
   };
   if (model === 'image-01') {
@@ -222,14 +222,22 @@ const hailuoVideo = (args: GenerateArgs): SubmitVideoArgs => ({
 });
 // xAI Grok Imagine Video: text-to-video only — the base fields are the whole surface.
 const grokVideo = (args: GenerateArgs): SubmitVideoArgs => videoBase(args, 'grok-imagine-video');
+const falVideo = (args: GenerateArgs): SubmitVideoArgs => ({
+  ...videoBase(args, 'fal'),
+  falModel: str(args.falModel),
+  ratio: str(args.ratio),
+  refImages: list(args.refImages),
+  refVideos: list(args.refVideos),
+  refAudios: list(args.refAudios),
+});
 const jimengAvatarVideo = (args: GenerateArgs): SubmitVideoArgs => ({
   model: 'jimeng-avatar', name: str(args.name), firstFrame: str(args.firstFrame), refAudios: list(args.refAudios),
   likenessConsent: bool(args.likenessConsent),
 });
 
-const VIDEO_STRATEGIES = { seedance2: seedanceVideo, kling: klingVideo, hailuo: hailuoVideo, byteplus: byteplusVideo, 'grok-imagine-video': grokVideo, ofox: ofoxVideo, 'jimeng-avatar': jimengAvatarVideo } as const;
+const VIDEO_STRATEGIES = { seedance2: seedanceVideo, kling: klingVideo, hailuo: hailuoVideo, byteplus: byteplusVideo, 'grok-imagine-video': grokVideo, ofox: ofoxVideo, fal: falVideo, 'jimeng-avatar': jimengAvatarVideo } as const;
 export function buildSubmitVideoArgs(args: GenerateArgs): SubmitVideoArgs {
-  const model = args.model === 'kling' || args.model === 'hailuo' || args.model === 'byteplus' || args.model === 'grok-imagine-video' || args.model === 'ofox' || args.model === 'jimeng-avatar' ? args.model : 'seedance2';
+  const model = args.model === 'kling' || args.model === 'hailuo' || args.model === 'byteplus' || args.model === 'grok-imagine-video' || args.model === 'ofox' || args.model === 'fal' || args.model === 'jimeng-avatar' ? args.model : 'seedance2';
   return VIDEO_STRATEGIES[model](args);
 }
 

@@ -64,6 +64,14 @@ const sqliteVecFilters = SQLITE_VEC_PACKAGES
   .map((packageSuffix) => `!node_modules/sqlite-vec-${packageSuffix}/**`);
 const updateChannel = target.includes('arm64') ? 'latest-arm64' : 'latest-x64';
 const hasMacSigningCertificate = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
+// The bundled full-precision Whisper model is ~3.1 GB. NSIS cannot mmap an
+// installer payload that large on macOS, and the app already supports downloading
+// the verified model from Settings → local transcription on first use.
+const distResourceFilter = [
+  '**/*',
+  '!media/uploads/**',
+  ...(target === 'win32-x64' ? ['!whisper-models/**'] : []),
+];
 
 export default {
   appId: 'dev.openchatcut.app',
@@ -117,7 +125,7 @@ export default {
     // Exclude media/uploads because Vite copies all of public/ into dist, which would embed gigabytes of user assets.
     // uploadsMiddleware serves /media/uploads directly from the asset directory (userData in packaged builds),
     // so resources/dist never needs those files.
-    { from: 'dist', to: 'dist', filter: ['**/*', '!media/uploads/**'] },
+    { from: 'dist', to: 'dist', filter: distResourceFilter },
     { from: 'desktop-dist/remotion-bundle', to: 'remotion-bundle' },
     { from: 'desktop-dist/chrome-headless-shell', to: 'chrome-headless-shell' },
   ],

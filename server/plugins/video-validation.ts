@@ -4,7 +4,8 @@ export type KlingVideoReferType = 'feature' | 'base';
 
 export interface VideoRequest {
   operationId?: string;
-  model?: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'jimeng-avatar';
+  model?: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'fal' | 'jimeng-avatar';
+  falModel?: string;
   prompt?: string;
   name?: string;
   durationSeconds?: number | string;
@@ -35,7 +36,8 @@ export interface VideoRequest {
 }
 
 export interface ValidVideoRequest extends Omit<VideoRequest, 'model' | 'prompt' | 'durationSeconds' | 'ratio' | 'refImagePaths' | 'refVideoPaths' | 'refAudioPaths'> {
-  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'jimeng-avatar';
+  model: 'seedance2' | 'kling' | 'hailuo' | 'byteplus' | 'grok-imagine-video' | 'ofox' | 'fal' | 'jimeng-avatar';
+  falModel?: string;
   prompt: string;
   durationSeconds: number;
   durationSpecified: boolean;
@@ -247,9 +249,33 @@ function validateJimengAvatar(input: ValidVideoRequest): ValidVideoRequest {
   return input;
 }
 
+/** Input mapping shared by Fal validation and provider submission. */
+export function falVideoCatalogInput(input: ValidVideoRequest) {
+  return {
+    falModel: input.falModel!,
+    prompt: input.prompt,
+    duration: input.durationSpecified ? input.durationSeconds : undefined,
+    aspectRatio: input.ratio,
+    resolution: input.resolution,
+    imageUrls: input.refImagePaths,
+    videoUrls: input.refVideoPaths,
+    audioUrls: input.refAudioPaths,
+  };
+}
+
 export function validateVideoRequest(input: VideoRequest): ValidVideoRequest {
-  if (input.model !== 'seedance2' && input.model !== 'kling' && input.model !== 'hailuo' && input.model !== 'byteplus' && input.model !== 'grok-imagine-video' && input.model !== 'ofox' && input.model !== 'jimeng-avatar') {
-    throw new Error('model must be seedance2, kling, hailuo, byteplus, grok-imagine-video, ofox, or jimeng-avatar');
+  if (input.model !== 'seedance2' && input.model !== 'kling' && input.model !== 'hailuo' && input.model !== 'byteplus' && input.model !== 'grok-imagine-video' && input.model !== 'ofox' && input.model !== 'fal' && input.model !== 'jimeng-avatar') {
+    throw new Error('model must be seedance2, kling, hailuo, byteplus, grok-imagine-video, ofox, fal, or jimeng-avatar');
+  }
+  if (input.model === 'fal') {
+    if (!input.falModel?.trim()) throw new Error('Choose a Fal video model in Settings or specify falModel');
+    for (const key of ['mode', 'refVideoMode', 'promptOptimizer', 'fastPretreatment', 'seed', 'cameraFixed', 'watermark', 'returnLastFrame', 'executionExpiresAfter', 'priority', 'multiPrompts', 'shotType'] as const) {
+      if (input[key] !== undefined) throw new Error(`${key} is not supported by the Fal video integration`);
+    }
+    return {
+      ...common(input, 'fal'),
+      falModel: input.falModel.trim(),
+    };
   }
   if (input.model !== 'jimeng-avatar' && input.likenessConsent !== undefined) {
     throw new Error('likenessConsent is supported by jimeng-avatar only');

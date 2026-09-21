@@ -19,6 +19,7 @@ import { useCodexSettings } from './useCodexSettings';
 import type { CodexAgentStatus } from '../../../shared/codex-agent';
 import type { CopilotAgentStatus } from '../../../shared/copilot-agent';
 import { useCopilotSettings } from './useCopilotSettings';
+import { useClaudeCodeSettings } from './useClaudeCodeSettings';
 import { stageFieldValue } from './codexReasoning';
 import { SettingsVersionControl } from './SettingsVersionControl';
 import {
@@ -233,6 +234,7 @@ function useFieldContext(
     modelValue(status, 'CODEX_REASONING_EFFORT'),
   );
   const copilot = useCopilotSettings(copilotEnabled);
+  const claudeCode = useClaudeCodeSettings(modelValue(status, 'CLAUDE_CODE_MODEL'));
   const onStage = (field: SettingsField, raw: string): void => {
     const staged = stageFieldValue(values, field, raw, status, codex.models, autoClearedEffort);
     setValues(staged.values);
@@ -253,7 +255,7 @@ function useFieldContext(
       : { ...previous, [field.name]: '' });
   };
   return {
-    status, values, reveal, readOnly, onStage, onToggleClear, modelOptions, codex, copilot, refreshStatus,
+    status, values, reveal, readOnly, onStage, onToggleClear, modelOptions, codex, copilot, claudeCode, refreshStatus,
     onModelsDiscovered: (name, models) => {
       setModelOptions((previous) => ({ ...previous, [name]: [...new Set(models)] }));
     },

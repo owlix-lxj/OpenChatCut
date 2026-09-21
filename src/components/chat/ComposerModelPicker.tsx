@@ -8,7 +8,7 @@ import type { ComposerModelView } from './useComposerModelView';
 import codexPng from '../../../assets/vendor-icons/codex-color.png';
 import copilotSvg from '../../../assets/vendor-icons/copilot.svg?raw';
 
-function ChoiceLogo({ backend, provider }: { backend: 'api' | 'codex' | 'copilot'; provider: string }) {
+function ChoiceLogo({ backend, provider }: { backend: 'api' | 'codex' | 'copilot' | 'claude-code'; provider: string }) {
   if (backend === 'copilot') {
     return (
       <span
@@ -22,6 +22,7 @@ function ChoiceLogo({ backend, provider }: { backend: 'api' | 'codex' | 'copilot
   if (backend === 'api' && (provider === 'openai' || provider === 'deepseek')) {
     return <VendorIcon vendor={provider} size={18} />;
   }
+  if (backend === 'claude-code') return <VendorIcon vendor="anthropic" size={18} />;
   if (backend !== 'codex') return null;
   return (
     <img

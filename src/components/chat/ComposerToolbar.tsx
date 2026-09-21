@@ -12,7 +12,7 @@ export type ComposerPopover =
 
 interface ToolbarProps {
   mode: ChatMode;
-  activeModel?: { providerLabel: string; provider: string; model: string; backend: 'api' | 'codex' | 'copilot' };
+  activeModel?: { providerLabel: string; provider: string; model: string; backend: 'api' | 'codex' | 'copilot' | 'claude-code' };
   contextLabel: string;
   contextTitle: string;
   contextNearLimit: boolean;

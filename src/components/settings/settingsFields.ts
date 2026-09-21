@@ -93,6 +93,9 @@ export const modelPicker = (
   options: values.map((value) => ({ value, label: value })),
 });
 
+// Backward-compatible name used by provider settings modules.
+export const modelSelect = modelPicker;
+
 export const routeSelect = (
   name: string,
   options: readonly SelectOption[],
