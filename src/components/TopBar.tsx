@@ -16,9 +16,10 @@ interface TopBarProps {
   exportJobCount?: number;
   onHome?: () => void;
   onRename?: (name: string) => void;
+  onSettings?: () => void;
 }
 
-export function TopBar({ projectName, canUndo, canRedo, exporting, exportJobCount = 0, onHome, onRename }: TopBarProps) {
+export function TopBar({ projectName, canUndo, canRedo, exporting, exportJobCount = 0, onHome, onRename, onSettings }: TopBarProps) {
   const t = useT();
   const isMacDesktop = window.openChatCutDesktop?.platform === 'darwin';
   const [editing, setEditing] = useState(false);
@@ -55,6 +56,7 @@ export function TopBar({ projectName, canUndo, canRedo, exporting, exportJobCoun
       <TopBarIconButton icon="redo" label={t('重做')} onClick={() => invokeAction('redo', undefined, 'toolbar')} disabled={!canRedo} />
       <TopBarIconButton icon="keyboard" label={t('编辑快捷键')} onClick={() => invokeAction('keyboard-shortcuts', undefined, 'toolbar')} />
       <TopBarIconButton icon="palette" label={t('设计风格(品牌)')} onClick={() => invokeAction('open-design', undefined, 'toolbar')} />
+      <TopBarIconButton icon="sliders" label={t('设置')} onClick={onSettings} />
       <SkinPicker />
       <TopBarIconButton icon="history" label={t('历史版本')} onClick={() => invokeAction('open-history', undefined, 'toolbar')} />
       {/* self-contained: trigger + popover, global export history, zero props */}

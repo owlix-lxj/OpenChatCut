@@ -1,69 +1,69 @@
-# 业务平台集成部署
+# AI-cut 桌面平台集成部署
 
-OpenChatCut 作为管理后台的同域路径 `https://admin.daost.cn/openchatcut/` 部署。管理后台只负责申请一次性启动票据并打开该地址；业务 JWT 不会进入编辑器。OpenChatCut 用票据换取 8 小时 HttpOnly Cookie，并以签名会话访问网关的租户素材接口。Node 服务运行在业务后端仓库的 `services/node/openchatcut-server`，只提供 API、媒体处理和渲染。
+AI-cut 编辑器只运行在用户电脑上的 Electron 桌面客户端。业务管理前端不再发布
+OpenChatCut 的 React 静态构建，也不再提供网页版编辑器。
 
-编辑器页面使用 `no-referrer`，Nginx 专用访问日志也不记录查询参数，避免两分钟启动票据进入资源请求或日志。
+## 拓扑
 
-## 配置
+- `https://admin.daost.cn/content/ai-cut`：AI-cut 介绍与桌面唤起页；
+- `https://admin.daost.cn/desktop-login`：系统浏览器登录桥梁，生成一次性 launch ticket，
+  再通过 `openchatcut://auth` 返回桌面客户端；
+- 本地 AI-cut：编辑器、本地素材、本地 Whisper 和本地导出；
+- `openchatcut-server` 与 API Gateway：租户鉴权、业务素材、平台模型、数字人、云端任务
+  和其他平台 API。供应商密钥只保存在服务端。
 
-API Gateway 的 `/etc/live-platform/api-gateway.env`：
+旧的 `/openchatcut` 与 `/openchatcut/` 由 Nginx 重定向到 `/content/ai-cut`。
+
+## 安全边界
+
+桌面客户端只持有网关签发的短期 session token。Electron 主进程调用
+`POST /api/v1/video-editor/desktop-session` 兑换 launch ticket，并让本地内嵌服务代为转发
+session token。`OPENCHATCUT_PLATFORM_SESSION_SECRET` 和模型供应商密钥绝不能进入桌面安装包、
+Vue 静态资源或任何 `VITE_` 变量。
+
+## 云端服务配置
+
+`openchatcut-server` 以 API-only 模式运行：
 
 ```text
-VIDEO_EDITOR_BASE_URL=https://admin.daost.cn/openchatcut/
-VIDEO_EDITOR_SESSION_SECRET=<至少 32 字节的随机密钥>
-VIDEO_EDITOR_LAUNCH_TTL=2m
-```
-
-OpenChatCut 的 `/etc/openchatcut/openchatcut.env`：
-
-```text
+OPENCHATCUT_API_ONLY=true
 OPENCHATCUT_PLATFORM_MODE=platform
 OPENCHATCUT_HOST=127.0.0.1
 OPENCHATCUT_PORT=5199
-OPENCHATCUT_DIST_DIR=/opt/openchatcut/current/dist
-OPENCHATCUT_EDITOR_URL=https://admin.daost.cn/openchatcut/
-OPENCHATCUT_PLATFORM_API_BASE_URL=https://api.daost.cn/api
-OPENCHATCUT_PLATFORM_SESSION_SECRET=<与 VIDEO_EDITOR_SESSION_SECRET 完全相同>
+OPENCHATCUT_PLATFORM_API_BASE_URL=http://127.0.0.1:8080/api
+OPENCHATCUT_EDITOR_URL=https://admin.daost.cn/
+OPENCHATCUT_PLATFORM_SESSION_SECRET=<与网关会话密钥一致>
 MEDIA_DIR=/var/lib/openchatcut/media/uploads
 CC_REMOTION_BUNDLE=/opt/live-platform/current/openchatcut-server/remotion-bundle
 ```
 
-供应商密钥也只写入该服务器环境文件，不使用 `VITE_` 前缀。配置文件建议权限为 `root:openchatcut 0640`。`VIDEO_EDITOR_SESSION_SECRET` 与 `OPENCHATCUT_PLATFORM_SESSION_SECRET` 不一致时，启动票据无法交换；生产入口会拒绝缺少密钥或非 HTTPS 公网地址的配置。
+平台内置 GPT、DeepSeek、通义千问及千问语音能力的供应商密钥只配置在 API Gateway。
 
-网关的 `CORS_ALLOW_ORIGINS` 继续只包含管理后台源站。编辑器素材请求由 OpenChatCut 服务端调用网关，不需要把编辑器域名加入浏览器 CORS 白名单。
+## 构建
 
-## 构建与启动
-
-使用 Node.js 24，在 Linux 构建机或目标服务器完成依赖安装和构建。`OPENCHATCUT_PLATFORM_MODE` 同时决定前端 bundle 的平台功能开关，必须在构建阶段设置；仅在 systemd 环境文件里设置是不够的：
+平台前端在“业务管理前端”仓库独立构建：
 
 ```bash
-npm ci
-OPENCHATCUT_PLATFORM_MODE=platform npm run build
+npm run build
+```
+
+该构建不会访问 OpenChatCut 源码，也不会产生 `dist/openchatcut/`。
+
+云端 Node 服务只构建服务端产物：
+
+```bash
+OPENCHATCUT_PLATFORM_MODE=platform npm run build:server
 npm run desktop:prebundle
-npm prune --omit=dev
 ```
 
-发布目录至少需要 `dist/`、`server-dist/`、`node_modules/`、`package.json`、`package-lock.json`，以及由 `desktop:prebundle` 生成的 `desktop-dist/remotion-bundle/`（发布时放到服务目录的 `remotion-bundle/`）。该目录必须允许服务账号写入，因为启动后的上传目录会以符号链接挂入渲染包。将新版本放入 `/opt/openchatcut/releases/<release-id>`，再原子切换 `/opt/openchatcut/current` 软链接。不要在 macOS 构建后直接复制 `node_modules` 到 Linux；项目包含平台相关的原生依赖。
-
-安装后端仓库的 `deployment/systemd/openchatcut-server.service`，并将管理前端仓库的 Nginx 配置中的 OpenChatCut 代理段合并到 `admin.daost.cn` 后执行：
-
-```bash
-systemctl daemon-reload
-systemctl enable --now openchatcut-server
-curl --fail http://127.0.0.1:5199/healthz
-nginx -t
-systemctl reload nginx
-curl --fail https://admin.daost.cn/healthz
-```
+业务后端仓库的 `services/node/openchatcut-server/build.mjs` 会同步 `server-dist` 并安装运行时
+依赖。云端发布不需要 OpenChatCut 的编辑器 `dist/`。
 
 ## 验收
 
-1. 在 `https://admin.daost.cn` 登录租户账号，打开应用中心的“AI 视频剪辑”。
-2. 确认浏览器地址中的 `platform_ticket` 立即消失，且不出现第二次登录。
-3. 新建工程，刷新页面后确认工程仍存在；另一租户或另一账号看不到该工程。
-4. 从“业务素材”导入视频或图片并加入时间线。
-5. 导出 MP4，确认本地交付成功，并在业务素材库中出现带 `OpenChatCut` 标签的新视频。
-
-当前平台模式下，项目全文/混合搜索不跨租户查询；没有可证明隔离的搜索路径会返回空结果。这不影响按项目列表打开与保存工程。
-
-平台模式的本地素材、R2 上传对象和工程存储均按租户/账号分区。原本供单用户外部 Agent 使用的全局 MCP Bearer Token 在平台模式下禁用；不要将该入口作为多租户 Agent 服务开放。
+1. 登录管理后台并进入 `/content/ai-cut`，确认展示桌面客户端入口；
+2. 点击“打开桌面应用”，确认通过 `openchatcut://open` 唤起 AI-cut；
+3. 在桌面端发起登录，确认浏览器进入 `/desktop-login` 并自动返回客户端；
+4. 重启桌面端，确认加密会话仍可恢复；
+5. 验证业务素材、平台模型、数字人和云端任务都通过租户 session 访问；
+6. 访问旧 `/openchatcut/`，确认跳转到 `/content/ai-cut`，且服务器不再发布网页编辑器资源。

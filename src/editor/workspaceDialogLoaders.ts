@@ -7,9 +7,10 @@ export const loadExportDialog = () => import('../export/ExportDialog');
 export const loadDesignStylePanel = () => import('../components/settings/DesignStylePanel');
 export const loadVersionHistory = () => import('../components/VersionHistory');
 export const loadShortcutsDialog = () => import('../shortcuts/ShortcutsDialog');
+export const loadSettingsDialog = () => import('../components/settings/SettingsDialog');
 
 const LOADERS = [
-  loadExportDialog, loadDesignStylePanel, loadVersionHistory, loadShortcutsDialog,
+  loadExportDialog, loadDesignStylePanel, loadVersionHistory, loadSettingsDialog, loadShortcutsDialog,
 ];
 
 /** Fetch the overlay chunks once the editor is idle, so opening one is instant. */

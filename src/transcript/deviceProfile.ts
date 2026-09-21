@@ -50,7 +50,8 @@ export async function detectDeviceProfile(): Promise<DeviceProfile> {
 
 /**
  * Backend + model tier. User's explicit setting (settings → 本地模型 → 默认模型,
- *  synced to localStorage 'cc.asrModel') wins; otherwise base. Measured:
+ *  synced to localStorage 'cc.asrModel') wins; otherwise the desktop-bundled
+ *  full-precision large-v3 model. Measured:
  *  wasm small runs at RTF ~0.9 (a 10-min clip takes ~9 min) while base is
  *  ~2.5x faster with comparable quality for typical speech, so the auto
  *  default stays on base and small/medium are explicit choices.
@@ -67,7 +68,7 @@ export function chooseAsrConfig(profile: DeviceProfile): AsrConfig {
   const tier: AsrModelTier = preferred === 'tiny' || preferred === 'base'
     || preferred === 'small' || preferred === 'medium' || preferred === 'large-v3-turbo'
     ? preferred
-    : 'base';
+    : 'large-v3-turbo';
   const model = asrModelEntry(tier);
   if (!model) throw new Error(`Unsupported local ASR model tier: ${tier}`);
   // WebGPU is an explicit opt-in (settings → 本地模型 → WebGPU 加速) and only

@@ -2,10 +2,10 @@ import { Suspense } from 'react';
 import type { ProjectMeta } from '../../persist/projectStoreCoordinators';
 import { theme } from '../../theme';
 import { useT } from '../../i18n/locale';
-import { Icon } from '../icons';
+import { BrandMark, Icon } from '../icons';
 // Opened on demand, so they load on demand — see dashboardDialogs.tsx.
 import {
-  MediaCleanupDialog, ShortcutsDialog,
+  MediaCleanupDialog, SettingsDialog, ShortcutsDialog,
 } from './dashboardDialogs';
 import { useDashboardDialogPrefetch } from './dashboardDialogLoaders';
 import { SkinPicker } from '../settings/SkinPicker';
@@ -41,8 +41,11 @@ export function DashboardTitlebarContent({ model }: { model: DashboardModel }) {
   const t = useT();
   return (
     <>
+      <BrandMark size={18} />
+      <strong style={{ fontSize: 14, letterSpacing: '-0.02em' }}>AI-cut</strong>
       <span style={{ color: theme.textDim, fontSize: 13 }}>{t('· 我的工程').replace(/^·\s*/, '')}</span>
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        <button onClick={() => model.setDialog('settings', true)} data-tip={t('设置')} aria-label={t('设置')} className="cc-header-btn cc-tip cc-tip-r" style={settingsBtn}><Icon name="sliders" size={16} /></button>
         <button onClick={() => model.setDialog('shortcuts', true)} data-tip={t('编辑快捷键')} aria-label={t('编辑快捷键')} className="cc-header-btn cc-tip cc-tip-r" style={settingsBtn}><Icon name="keyboard" size={16} /></button>
         <SkinPicker />
       </span>
@@ -168,6 +171,7 @@ export function DashboardDialogs({ model }: { model: DashboardModel }) {
     // did before it was opened. The idle prefetch keeps that window tiny.
     <Suspense fallback={null}>
       {model.dialogs.shortcuts && <ShortcutsDialog onClose={() => model.setDialog('shortcuts', false)} />}
+      {model.dialogs.settings && <SettingsDialog onClose={() => model.setDialog('settings', false)} />}
       {model.dialogs.cleanup && <MediaCleanupDialog onClose={() => model.setDialog('cleanup', false)} />}
     </Suspense>
   );

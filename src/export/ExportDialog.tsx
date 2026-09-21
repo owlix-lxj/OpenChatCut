@@ -1,4 +1,6 @@
 import type { ProjectDoc, TimelineState } from '../editor/types';
+import { useState } from 'react';
+import { SocialPublishPanel } from './SocialPublishPanel';
 import type { ExportJobStore } from './backgroundExportStore';
 import { ExportDialogMain } from './ExportDialogMain';
 import { ExportDialogShell, ExportSidebar } from './ExportDialogShell';
@@ -16,14 +18,17 @@ interface ExportDialogProps {
 
 export function ExportDialog({ state, project, projectId, projectName, exportJobs, onClose }: ExportDialogProps) {
   const model = useExportDialogModel({ state, project, projectId, projectName, exportJobs, onClose });
+  const [publishing, setPublishing] = useState(false);
   const selectTab = (tab: ExportTab) => {
+    setPublishing(false);
     model.setTab(tab);
     model.workflow.resetFeedback();
   };
   return (
     <ExportDialogShell base={model.base} state={state} onClose={onClose}>
-      <ExportSidebar tab={model.tab} busy={!!model.workflow.busy} onTabChange={selectTab} />
-      <ExportDialogMain state={state} model={model} />
+      <ExportSidebar tab={model.tab} busy={!!model.workflow.busy} onTabChange={selectTab}
+        publishing={publishing} onPublish={() => setPublishing(true)} />
+      {publishing ? <SocialPublishPanel projectName={projectName} /> : <ExportDialogMain state={state} model={model} />}
     </ExportDialogShell>
   );
 }

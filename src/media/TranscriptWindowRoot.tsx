@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TranscriptWindowPayload } from '../../shared/transcript-window';
 import { TranscriptViewerDialog, type TranscriptViewerAsset } from './TranscriptViewerDialog';
+import { useAgentBackendSync } from '../app/appShell';
 
 /**
  * Desktop-only root for the floating transcript window
@@ -8,6 +9,7 @@ import { TranscriptViewerDialog, type TranscriptViewerAsset } from './Transcript
  * swaps assets locally; closing goes through the window-action channel.
  */
 export function TranscriptWindowRoot() {
+  useAgentBackendSync();
   const [payload, setPayload] = useState<TranscriptWindowPayload | null>(null);
   const [index, setIndex] = useState(0);
   useEffect(() => {

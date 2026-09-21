@@ -171,7 +171,7 @@ for (const blockmap of [
   'x64.exe.blockmap',
 ]) {
   assert.ok(
-    workflow.includes(`release-files/OpenChatCut-\${EXPECTED_VERSION}-${blockmap}`),
+    workflow.includes(`release-files/AI-cut-\${EXPECTED_VERSION}-${blockmap}`),
     `release gate must require ${blockmap}`,
   );
 }
@@ -183,7 +183,7 @@ assert.match(workflow, /release-files\/\*/, 'GitHub Release must publish install
 
 assert.doesNotMatch(
   workflow,
-  /find release -type d -name OpenChatCut\.app|(?:mac|win|linux)-unpacked\b/,
+  /find release -type d -name AI-cut\.app|(?:mac|win|linux)-unpacked\b/,
   'desktop smoke tests must never launch unpacked electron-builder output',
 );
 assert.equal(
@@ -204,23 +204,23 @@ assert.match(
 assert.match(workflow, /hdiutil attach[\s\S]*?"\$\{dmgs\[0\]\}"/, 'macOS smoke must mount the generated DMG');
 assert.match(
   workflow,
-  /"\$mounted_app\/Contents\/MacOS\/OpenChatCut"/,
+  /"\$mounted_app\/Contents\/MacOS\/AI-cut"/,
   'macOS smoke must launch the app from the mounted DMG',
 );
 assert.match(workflow, /unzip -tq "\$\{zips\[0\]\}"/, 'macOS smoke must validate the generated update ZIP');
 assert.match(
   workflow,
-  /OpenChatCut\.app\/Contents\/MacOS\/OpenChatCut/,
+  /AI-cut\.app\/Contents\/MacOS\/AI-cut/,
   'macOS update ZIP must contain the application executable',
 );
 assert.match(
   workflow,
-  /OpenChatCut\.app\/Contents\/Frameworks\/Electron Framework\.framework\/Versions\/A\/Electron Framework/,
+  /AI-cut\.app\/Contents\/Frameworks\/Electron Framework\.framework\/Versions\/A\/Electron Framework/,
   'macOS update ZIP must contain the Electron runtime',
 );
 assert.match(
   workflow,
-  /render_runtime="OpenChatCut\.app\/Contents\/Resources\/chrome-headless-shell\//,
+  /render_runtime="AI-cut\.app\/Contents\/Resources\/chrome-headless-shell\//,
   'macOS update ZIP must contain the packaged render runtime',
 );
 assert.match(

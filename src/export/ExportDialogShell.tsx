@@ -45,12 +45,14 @@ export function ExportDialogShell({ base, state, onClose, children }: ExportDial
 }
 
 interface ExportSidebarProps {
+  publishing?: boolean;
+  onPublish?: () => void;
   tab: ExportTab;
   busy: boolean;
   onTabChange: (tab: ExportTab) => void;
 }
 
-export function ExportSidebar({ tab, busy, onTabChange }: ExportSidebarProps) {
+export function ExportSidebar({ tab, busy, onTabChange, publishing, onPublish }: ExportSidebarProps) {
   const t = useT();
   return (
     <aside className="cc-export-sidebar">
@@ -60,11 +62,11 @@ export function ExportSidebar({ tab, busy, onTabChange }: ExportSidebarProps) {
           <button
             type="button"
             role="tab"
-            aria-selected={tab === entry.key}
+            aria-selected={!publishing && tab === entry.key}
             aria-controls={`cc-export-content-${entry.key}`}
             id={`cc-export-tab-${entry.key}`}
             key={entry.key}
-            className={`cc-export-tab${tab === entry.key ? ' active' : ''}`}
+            className={`cc-export-tab${!publishing && tab === entry.key ? ' active' : ''}`}
             onClick={() => onTabChange(entry.key)}
             disabled={busy}
           >
@@ -72,6 +74,12 @@ export function ExportSidebar({ tab, busy, onTabChange }: ExportSidebarProps) {
             <span><strong>{t(entry.label)}</strong><small>{entry.summary}</small></span>
           </button>
         ))}
+        {onPublish && <button type="button" role="tab" id="cc-export-tab-publish" aria-controls="cc-export-content-publish"
+          aria-selected={!!publishing} className={`cc-export-tab${publishing ? ' active' : ''}`}
+          onClick={onPublish}>
+          <span className="cc-export-tab-icon"><Icon name="upload" size={15} /></span>
+          <span><strong>平台草稿</strong><small>账号 · 视频上传</small></span>
+        </button>}
       </div>
     </aside>
   );

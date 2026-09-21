@@ -2,8 +2,8 @@
 // The default profile preserves MEDIA_DIR → worktree default → R2 read-through semantics
 // and legacy-copy behavior. Isolated development profiles use only their profile media
 // directory: no legacy fallback, legacy copy, MEDIA_DIR override, or R2 read-through.
-import { createReadStream, existsSync } from 'node:fs';
-import { copyFile, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants, createReadStream, existsSync } from 'node:fs';
+import { copyFile, link, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve } from 'node:path';
@@ -62,6 +62,70 @@ export function uploadReadDirs(
   if (platformStorageScoped()) return [writable];
   if (isIsolatedDevProfile(profile) || writable === profile.mediaDir) return [writable];
   return [writable, profile.mediaDir];
+}
+
+export interface DesktopScopedMediaMigrationResult {
+  linked: number;
+  copied: number;
+  skipped: number;
+}
+
+/**
+ * Recover files written by desktop builds that incorrectly treated a platform
+ * login as a local filesystem tenant boundary. Files are materialized at their
+ * stable unscoped paths without deleting the legacy tree. Hard links avoid
+ * duplicating large videos; cross-device roots fall back to exclusive copies.
+ */
+export async function migrateDesktopScopedMedia(
+  destinationRoot = uploadDir(),
+): Promise<DesktopScopedMediaMigrationResult> {
+  const result: DesktopScopedMediaMigrationResult = { linked: 0, copied: 0, skipped: 0 };
+  const scopesRoot = join(destinationRoot, 'platform-scopes');
+  const scopes = await readdir(scopesRoot, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+
+  async function materialize(source: string, destination: string): Promise<void> {
+    const entries = await readdir(source, { withFileTypes: true });
+    await mkdir(destination, { recursive: true });
+    for (const entry of entries) {
+      const sourcePath = join(source, entry.name);
+      const destinationPath = join(destination, entry.name);
+      if (entry.isDirectory()) {
+        await materialize(sourcePath, destinationPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        result.skipped += 1;
+        continue;
+      }
+      try {
+        await link(sourcePath, destinationPath);
+        result.linked += 1;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EEXIST') {
+          result.skipped += 1;
+          continue;
+        }
+        if (code !== 'EXDEV' && code !== 'EPERM' && code !== 'ENOTSUP') throw error;
+        try {
+          await copyFile(sourcePath, destinationPath, constants.COPYFILE_EXCL);
+          result.copied += 1;
+        } catch (copyError) {
+          if ((copyError as NodeJS.ErrnoException).code === 'EEXIST') result.skipped += 1;
+          else throw copyError;
+        }
+      }
+    }
+  }
+
+  for (const scope of scopes) {
+    if (scope.isDirectory()) await materialize(join(scopesRoot, scope.name), destinationRoot);
+    else result.skipped += 1;
+  }
+  return result;
 }
 
 export function isCustomUploadDir(profile: RuntimeProfile = runtimeProfile()): boolean {

@@ -1,0 +1,37 @@
+.cc-publish { max-height: min(740px, calc(100dvh - 120px)); }
+.cc-publish-scroll { padding: 16px; overflow-y: auto; min-height: 0; }
+.cc-publish-section + .cc-publish-section { border-top: 1px solid var(--cc-border); margin-top: 20px; padding-top: 16px; }
+.cc-publish h4 { font-size: 13px; margin: 0 0 10px; }
+.cc-publish p { font-size: 11px; line-height: 1.6; color: var(--cc-text-dim); margin: 8px 0; }
+.cc-publish button { border: 1px solid var(--cc-border); background: var(--cc-panel-alt); color: var(--cc-text); border-radius: 4px; padding: 7px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+.cc-publish button:disabled { cursor: default; opacity: .45; }
+.cc-publish button:hover:not(:disabled) { border-color: var(--cc-accent); }
+.cc-publish :is(button, input, textarea, select):focus-visible { outline: 2px solid var(--cc-accent); outline-offset: 2px; }
+.cc-publish label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; margin-top: 10px; }
+.cc-publish :is(input:not([type=checkbox]), textarea, select) { width: 100%; box-sizing: border-box; background: var(--cc-bg); color: var(--cc-text); border: 1px solid var(--cc-border); border-radius: 4px; padding: 9px; font: inherit; }
+.cc-publish textarea { resize: vertical; min-height: 90px; }
+.cc-publish .cc-publish-account { display: flex; align-items: center; gap: 6px; padding: 9px 0; border-bottom: 1px solid var(--cc-border); }
+.cc-publish-account label { flex: 1; flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.cc-publish input[type=checkbox] { width: 14px; height: 14px; flex: 0 0 14px; margin: 0; accent-color: var(--cc-accent); }
+.cc-publish small { display: block; font-size: 10px; color: var(--cc-text-dim); margin-top: 4px; overflow-wrap: anywhere; }
+.cc-publish-file { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.cc-publish-file span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cc-publish .cc-publish-primary { background: var(--cc-accent); color: var(--cc-on-accent, #fff); border-color: var(--cc-accent); }
+.cc-publish-submit { display: flex; justify-content: center; margin-top: 16px; }
+.cc-publish-submit > button { max-width: 100%; }
+.cc-publish-progress { padding-bottom: 10px; overflow-wrap: anywhere; }
+.cc-publish-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-publish-setup { padding-left: 18px; font-size: 11px; color: var(--cc-text-dim); line-height: 1.7; }
+.cc-publish-setup li + li { margin-top: 6px; }
+.cc-publish-account > button { flex-shrink: 0; }
+.cc-platform-opening { border: 1px solid var(--cc-border); border-radius: 12px; padding: 32px; max-width: calc(100vw - 48px); box-sizing: border-box; background: var(--cc-panel); color: var(--cc-text); text-align: center; }
+.cc-platform-opening::backdrop { background: rgb(0 0 0 / 65%); }
+.cc-platform-opening h2 { font-size: 16px; margin: 20px 0 8px; }
+.cc-platform-opening p { font-size: 12px; color: var(--cc-text-dim); margin: 0; line-height: 1.6; }
+.cc-platform-opening-motion { display: flex; justify-content: center; gap: 6px; height: 24px; align-items: center; }
+.cc-platform-opening-motion i { display: block; width: 6px; height: 18px; border-radius: 3px; background: var(--cc-accent); animation: cc-platform-opening-pulse 1s ease-in-out infinite; }
+.cc-platform-opening-motion i:nth-child(2) { animation-delay: .15s; }
+.cc-platform-opening-motion i:nth-child(3) { animation-delay: .3s; }
+@keyframes cc-platform-opening-pulse { 0%, 100% { transform: scaleY(.45); opacity: .45; } 50% { transform: scaleY(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cc-platform-opening-motion i { animation: none; } }
+@media (max-width: 600px) { .cc-publish .cc-publish-account { flex-wrap: wrap; } .cc-publish-account label { flex-basis: 100%; } }

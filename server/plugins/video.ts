@@ -1,5 +1,4 @@
 import { proxyDispatcher } from '../outbound-proxy.ts';
-import { isPlatformManaged } from '../keystore.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import {
@@ -399,9 +398,6 @@ async function runVideoOperation(
   providerTaskId?: string,
   storedResultUrls: readonly string[] = [],
 ): Promise<GenerationResult | GenerationResult[]> {
-  if (isPlatformManaged() && input.model !== 'seedance2') {
-    throw new Error('平台模式生成视频统一使用 Seedance');
-  }
   const expectedResultCount = expectedVideoResultCount(input);
   const checkpoint = generationResultCheckpoint(storedResultUrls, expectedResultCount, providerTaskId);
   let urls = checkpoint.urls;
@@ -476,9 +472,6 @@ export function videoGenerationPlugin(options: VideoOptions): Plugin {
         try {
           const raw = await readJson(req);
           const input = validate(await materializeVideoReferences(raw));
-          if (isPlatformManaged() && input.model !== 'seedance2') {
-            throw new Error('平台模式生成视频统一使用 Seedance');
-          }
           const name = String(input.name ?? '').trim() || `Video · ${(input.prompt || input.multiPrompts?.[0]?.prompt || input.model).slice(0, 36)}`;
           const submitArgs = Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'operationId'));
           const submission = await createGenerationJob(

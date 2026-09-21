@@ -6,20 +6,23 @@
  * the server.
  */
 export const PLATFORM_MODE_ENV = 'OPENCHATCUT_PLATFORM_MODE';
+export const DEFAULT_PLATFORM_API_BASE_URL = 'https://api.daost.cn/api';
 
 export const PLATFORM_LLM_PROVIDERS = ['openai', 'deepseek'] as const;
 export type PlatformLlmProvider = (typeof PLATFORM_LLM_PROVIDERS)[number];
 
 export const PLATFORM_IMAGE_VENDOR = 'gpt-image-2' as const;
-// Hosted deployments keep voice credentials server-side, but support the same
-// cloud Qwen-Audio route as the local settings surface.
-export const PLATFORM_VOICE_PROVIDERS = ['doubao', 'minimax', 'qwen'] as const;
+// Voice credentials are user-managed in the desktop app. Keep the platform
+// surface focused on the two supported providers and never expose Qwen here.
+export const PLATFORM_VOICE_PROVIDERS = ['doubao', 'minimax'] as const;
 export const PLATFORM_DEFAULT_VOICE_VENDOR = 'doubao' as const;
+export const PLATFORM_TRANSCRIPTION_PROVIDER = 'local' as const;
 export const PLATFORM_VIDEO_VENDOR = 'seedance2' as const;
 
 export const PLATFORM_DEFAULT_ROUTES = {
   image: PLATFORM_IMAGE_VENDOR,
   voice: PLATFORM_DEFAULT_VOICE_VENDOR,
+  transcription: PLATFORM_TRANSCRIPTION_PROVIDER,
   video: PLATFORM_VIDEO_VENDOR,
 } as const;
 

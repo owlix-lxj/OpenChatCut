@@ -2,7 +2,7 @@
 // Decoupled from the build-time copy of dist - uploading occurs at runtime and must be read directly uploadDir()).
 // The media extension is servedDiskFile(Range/206, required for video seek) in server/media-dir;
 // The rest (js/css/html/fonts, etc.) complete MIME simple outflow - ES module is loaded with strict MIME check.
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, normalize, sep } from 'node:path';
@@ -62,11 +62,46 @@ export function uploadsMiddleware(): Middleware {
 }
 
 /** dist/ Static cover: path traversal rejected; miss and like page path → index.html (hash routing). */
-export function distStaticMiddleware(distDir: string): Middleware {
+function normalizedBasePath(value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  try {
+    const url = new URL(trimmed, 'http://openchatcut.local');
+    if (url.origin !== 'http://openchatcut.local' || url.search || url.hash) return '/';
+    return `/${url.pathname.replace(/^\/+|\/+$/g, '')}/`;
+  } catch {
+    return '/';
+  }
+}
+
+/** Strip the Vite deployment base before looking up a file in dist/. */
+export function stripStaticBase(pathname: string, configuredBase?: string): string {
+  const base = normalizedBasePath(configuredBase);
+  if (base === '/') return pathname;
+  const prefix = base.slice(0, -1);
+  if (pathname === prefix) return '/';
+  return pathname.startsWith(base) ? `/${pathname.slice(base.length)}` : pathname;
+}
+
+/** The emitted HTML is authoritative when the build-time environment is unavailable at runtime. */
+export function staticBaseFromIndex(distDir: string): string | undefined {
+  try {
+    const html = readFileSync(join(distDir, 'index.html'), 'utf8');
+    return /(?:src|href)=["'](\/(?:[^"'?#]+\/)*?)assets\//i.exec(html)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+export function distStaticMiddleware(distDir: string, configuredBase?: string): Middleware {
   const root = normalize(distDir);
+  const staticBase = configuredBase?.trim() || staticBaseFromIndex(root);
   return async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') { next(); return; }
-    const rawPath = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    const rawPath = stripStaticBase(
+      decodeURIComponent((req.url ?? '/').split('?')[0]),
+      staticBase,
+    );
     const rel = rawPath === '/' ? 'index.html' : rawPath.replace(/^\/+/, '');
     const file = normalize(join(root, rel));
     if (file !== root && !file.startsWith(root + sep)) { next(); return; }  // time travel

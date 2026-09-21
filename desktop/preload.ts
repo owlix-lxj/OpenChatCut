@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
+import { SOCIAL_PUBLISH_CHANNEL, type SocialPublishApi, type PublishRequest } from '../shared/social-publish.ts';
 import {
   importLocalMediaFromFile,
   type LocalMediaPreloadDependencies,
@@ -53,6 +54,11 @@ import {
 } from '../shared/directory-import.ts';
 import { isTranscriptWindowPayload, TRANSCRIPT_WINDOW_CHANNELS, type TranscriptWindowPayload } from '../shared/transcript-window.ts';
 import { AGENT_LOCAL_MEDIA_CHANNEL, type AgentLocalMediaRequest, type AgentLocalMediaResult } from '../shared/agent-local-media.ts';
+import {
+  isResolvedDesktopVideoLink,
+  VIDEO_LINK_RESOLVER_CHANNEL,
+  type ResolvedDesktopVideoLink,
+} from '../shared/video-link-resolver.ts';
 
 export interface DesktopExportDirectoryGrant {
   readonly grantId: string;
@@ -84,10 +90,12 @@ export interface DesktopInferenceApi {
 
 
 export interface OpenChatCutDesktopApi {
+  socialPublish: SocialPublishApi;
   getPathForFile(file: File): string | undefined;
   platform: NodeJS.Platform;
   /** Open the platform login page in the system browser (openchatcut:// callback completes login). */
   platformLogin(): Promise<void>;
+  resolveVideoLink(value: string): Promise<ResolvedDesktopVideoLink>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   selectExportDirectory(): Promise<DesktopExportDirectoryGrant | null>;
   selectExportFile(suggestedFilename: string): Promise<DesktopExportFileGrant | null>;
@@ -136,8 +144,25 @@ async function invokeDesktopUpdate(
 }
 
 const api: OpenChatCutDesktopApi = {
+  socialPublish: {
+    snapshot: () => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'snapshot' } satisfies PublishRequest),
+    refreshAccount: platform => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'refresh-account', platform } satisfies PublishRequest),
+    connect: (platform) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'connect', platform } satisfies PublishRequest),
+    disconnect: (platform) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'disconnect', platform } satisfies PublishRequest),
+    chooseFile: () => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'choose-file' } satisfies PublishRequest),
+    exportFile: (destinationId, filename) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'export-file', destinationId, filename } satisfies PublishRequest),
+    prepare: (draft) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'prepare', draft } satisfies PublishRequest),
+    review: (jobId) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'review', jobId } satisfies PublishRequest),
+    saveDraft: (jobId) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'save-draft', jobId } satisfies PublishRequest),
+    cancel: (jobId) => ipcRenderer.invoke(SOCIAL_PUBLISH_CHANNEL, { action: 'cancel', jobId } satisfies PublishRequest),
+  },
   getPathForFile: (file) => webUtils.getPathForFile(file) || undefined,
   platformLogin: () => ipcRenderer.invoke('openchatcut:platform-login') as Promise<void>,
+  resolveVideoLink: async (value) => {
+    const result: unknown = await ipcRenderer.invoke(VIDEO_LINK_RESOLVER_CHANNEL, value);
+    if (!isResolvedDesktopVideoLink(result)) throw new Error('桌面端返回了无效的视频地址');
+    return result;
+  },
   platform: process.platform,
   selectDirectory: (defaultPath) =>
     ipcRenderer.invoke('openchatcut:select-directory', defaultPath) as Promise<string | null>,

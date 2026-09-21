@@ -4,13 +4,15 @@
 // search box, per-card edit (name/summary/body via modal) and delete.
 import { useEffect, useMemo, useState } from 'react';
 import { localizedCatalogText, useT } from '../i18n/locale';
-import { allCreativeSkills, setCustomSkills, findSkill } from '../agent/skills/skills-catalog';
+import { CREATIVE_SKILLS, allCreativeSkills, setCustomSkills, findSkill } from '../agent/skills/skills-catalog';
 import { loadCustomSkills, saveCustomSkill, deleteCustomSkill } from '../persist/skillStore';
 import type { CustomSkill } from '../persist/skillStore';
 import type { SkillDefinition } from '../agent/skills/skill-types';
 import { theme } from '../theme';
 
-const BUILTIN_IDS = new Set(['long-video-to-shorts', 'multi-clips-to-reels', 'ai-cinematic-short-film', 'product-ad-video-script', 'explainer-video', 'motion-graphic-placement', 'storyboard-shot-breakdown', 'video-thumbnail-generator', 'skill-creator']);
+// Derive this from the actual bundled catalog so newly bundled workflows can
+// never be presented as editable/deletable user-installed skills.
+const BUILTIN_IDS = new Set(CREATIVE_SKILLS.map((skill) => skill.slug));
 
 export function SkillsTabPanel({
   creativeMode,

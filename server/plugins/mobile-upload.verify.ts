@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { MobileUploadSessionSnapshot } from '../mobile-upload-service';
+import { configureDesktopPlatformSessionProvider } from '../platform-session';
 import { handleMobileUploadControl } from './mobile-upload';
 
 const snapshot: MobileUploadSessionSnapshot = {
@@ -13,10 +14,12 @@ let creates = 0;
 let reads = 0;
 let deletes = 0;
 const createdLocales: string[] = [];
+const createdOrigins: Array<string | undefined> = [];
 const controls = {
-  async createSession(locale: 'zh' | 'en' | 'it' | 'ru' = 'zh') {
+  async createSession(locale: 'zh' | 'en' | 'it' | 'ru' = 'zh', publicOrigin?: string) {
     creates += 1;
     createdLocales.push(locale);
+    createdOrigins.push(publicOrigin);
     return snapshot;
   },
   getSession(id: string) {
@@ -46,24 +49,41 @@ try {
   });
   assert.equal(created.status, 201);
   assert.equal(creates, 1, 'same-origin editor requests can create a session');
+  assert.equal(createdOrigins[0], undefined, 'ordinary local mode advertises LAN URLs');
+
+  const now = Math.floor(Date.now() / 1000);
+  const desktopPayload = Buffer.from(JSON.stringify({
+    type: 'session', sub: 'user-a', tenant_id: 'tenant-a', jti: 'desktop-test',
+    iat: now, exp: now + 300,
+  })).toString('base64url');
+  configureDesktopPlatformSessionProvider(() => `${desktopPayload}.remote-signature`);
+  const desktopCreated = await fetch(`${origin}/sessions?locale=en`, {
+    method: 'POST', headers: { origin },
+  });
+  assert.equal(desktopCreated.status, 201);
+  assert.equal(
+    createdOrigins[1], undefined,
+    'desktop platform mode must advertise the Mac LAN listener, not its loopback request origin',
+  );
+  configureDesktopPlatformSessionProvider(null);
 
   const missingOrigin = await fetch(`${origin}/sessions?locale=en`, { method: 'POST' });
   assert.equal(missingOrigin.status, 401);
-  assert.equal(creates, 1, 'mutations without Origin cannot create a session');
+  assert.equal(creates, 2, 'mutations without Origin cannot create a session');
 
   const crossSite = await fetch(`${origin}/sessions?locale=en`, {
     method: 'POST',
     headers: { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' },
   });
   assert.equal(crossSite.status, 401);
-  assert.equal(creates, 1, 'a cross-site simple POST cannot create a session');
+  assert.equal(creates, 2, 'a cross-site simple POST cannot create a session');
 
   const reboundCreate = await fetch(`${origin}/sessions?locale=en`, {
     method: 'POST',
     headers: { host: 'evil.example', origin: 'http://evil.example' },
   });
   assert.equal(reboundCreate.status, 401);
-  assert.equal(creates, 1, 'matching attacker Host and Origin cannot create a session');
+  assert.equal(creates, 2, 'matching attacker Host and Origin cannot create a session');
 
   const read = await fetch(`${origin}/sessions/${snapshot.id}`);
   assert.equal(read.status, 200);
@@ -107,8 +127,9 @@ try {
     method: 'POST', headers: { origin },
   });
   assert.equal(italian.status, 201);
-  assert.deepEqual(createdLocales, ['en', 'ru', 'it']);
+  assert.deepEqual(createdLocales, ['en', 'en', 'ru', 'it']);
 } finally {
+  configureDesktopPlatformSessionProvider(null);
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
 

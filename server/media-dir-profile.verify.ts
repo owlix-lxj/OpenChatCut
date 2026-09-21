@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   checkMediaDir,
+  migrateDesktopScopedMedia,
   resolveUploadFile,
   syncLegacyUploads,
   uploadDir,
@@ -42,6 +43,18 @@ try {
   await mkdir(profileA.mediaDir, { recursive: true });
   await writeFile(join(profileA.mediaDir, name), 'profile-a');
   assert.equal(resolveUploadFile(name, profileA, customDir), join(profileA.mediaDir, name));
+
+  const scopedRoot = join(profileA.mediaDir, 'platform-scopes', 'legacy-desktop-scope');
+  await mkdir(join(scopedRoot, '.references'), { recursive: true });
+  await writeFile(join(scopedRoot, 'legacy-video.mp4'), 'legacy-video');
+  await writeFile(join(scopedRoot, '.references', 'legacy-ref.json'), '{"path":"/tmp/source"}');
+  await writeFile(join(profileA.mediaDir, 'existing.mp4'), 'keep-existing');
+  await writeFile(join(scopedRoot, 'existing.mp4'), 'do-not-overwrite');
+  const migrated = await migrateDesktopScopedMedia(profileA.mediaDir);
+  assert.equal(migrated.linked + migrated.copied, 2);
+  assert.equal(migrated.skipped, 1);
+  assert.equal(await readFile(join(profileA.mediaDir, 'legacy-video.mp4'), 'utf8'), 'legacy-video');
+  assert.equal(await readFile(join(profileA.mediaDir, 'existing.mp4'), 'utf8'), 'keep-existing');
 
   const forbiddenProbe = join(fixture, 'must-not-be-created');
   assert.deepEqual(await checkMediaDir(forbiddenProbe, profileA), {

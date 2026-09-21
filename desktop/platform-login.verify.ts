@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  applyLoginTicket, consumeLoginCallback, deepLinkFromArgv, platformLoginUrl,
+  consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, platformApiBaseUrl, platformLoginUrl,
   startPlatformLogin,
 } from './platform-login.ts';
 
@@ -34,9 +34,29 @@ assert.deepEqual(consumeLoginCallback('openchatcut://auth?token=good&state=' + s
 assert.equal(deepLinkFromArgv(['electron', '.', 'openchatcut://auth?token=z']), 'openchatcut://auth?token=z');
 assert.equal(deepLinkFromArgv(['electron', '.']), null);
 
-// ── applyLoginTicket loads origin with ?platform_ticket ──
-let loaded = '';
-applyLoginTicket({ loadURL: (u: string) => { loaded = u; } } as unknown as Parameters<typeof applyLoginTicket>[0], 'http://127.0.0.1:5199', 'TKT');
-assert.equal(loaded, 'http://127.0.0.1:5199/?platform_ticket=TKT');
+// ── launch ticket is exchanged at the gateway, never at the local server ──
+const now = Math.floor(Date.now() / 1000);
+const payload = Buffer.from(JSON.stringify({
+  type: 'session', sub: 'user-a', tenant_id: 'tenant-a', jti: 'session-a', iat: now, exp: now + 3600,
+})).toString('base64url');
+let exchangeUrl = '';
+let exchangeBody = '';
+const exchanged = await exchangeDesktopSession('TKT', async (input, init) => {
+  exchangeUrl = String(input);
+  exchangeBody = String(init?.body ?? '');
+  return new Response(JSON.stringify({ session_token: `${payload}.signature` }), {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  });
+});
+assert.equal(exchangeUrl, `${platformApiBaseUrl()}/v1/video-editor/desktop-session`);
+assert.deepEqual(JSON.parse(exchangeBody), { ticket: 'TKT' });
+assert.equal(exchanged.claims.tenant_id, 'tenant-a');
+
+await assert.rejects(
+  exchangeDesktopSession('bad', async () => new Response(JSON.stringify({ message: 'invalid ticket' }), {
+    status: 401, headers: { 'Content-Type': 'application/json' },
+  })),
+  /invalid ticket/,
+);
 
 console.log('platform-login.verify: ok');

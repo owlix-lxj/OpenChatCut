@@ -13,6 +13,7 @@ import { downsampleMono, hasTranscribableSignal } from './client-asr-extract';
 import { ASR_INFERENCE_CONTRACT } from '../../shared/asr-inference-contract';
 import { tryDesktopNativeAsr, warmUpDesktopNativeAsr } from './desktop-native-asr';
 import { desktopNativeInferenceEnabled } from './desktop-inference-preference';
+import { asrModelEntry } from '../../shared/asr-models';
 
 const TARGET_SR = ASR_INFERENCE_CONTRACT.sampleRate;
 /** WebGPU load can hang on software renderers (headless/SwiftShader); force-fail
@@ -281,7 +282,14 @@ export async function localTranscribePathResumable(
   onWait?.();
 
   const profile = await detectDeviceProfile();
-  const config = chooseAsrConfig(profile);
+  const automaticConfig = chooseAsrConfig(profile);
+  const forcedModel = opts.localModelTier ? asrModelEntry(opts.localModelTier) : undefined;
+  const config: AsrConfig = forcedModel ? {
+    ...automaticConfig,
+    modelTier: forcedModel.id,
+    modelId: forcedModel.modelId,
+    revision: forcedModel.revision,
+  } : automaticConfig;
   await assertAsrModelDownloaded(config);
   if (desktopNativeInferenceEnabled()) {
     const nativeSource = await transcriptionSourceForPath(path, opts);

@@ -149,28 +149,28 @@ jobs:
 
           hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "${dmgs[0]}"
           mounted=true
-          mounted_app="$mount_dir/OpenChatCut.app"
-          test -x "$mounted_app/Contents/MacOS/OpenChatCut"
+          mounted_app="$mount_dir/AI-cut.app"
+          test -x "$mounted_app/Contents/MacOS/AI-cut"
           # The DMG and ZIP contain the same app; execute it from the writable ZIP below.
           hdiutil detach "$mount_dir"
           mounted=false
 
           unzip -tq "${zips[0]}"
-          test "$(unzip -Z1 "${zips[0]}" 'OpenChatCut.app/Contents/MacOS/OpenChatCut')" = \
-            'OpenChatCut.app/Contents/MacOS/OpenChatCut'
+          test "$(unzip -Z1 "${zips[0]}" 'AI-cut.app/Contents/MacOS/AI-cut')" = \
+            'AI-cut.app/Contents/MacOS/AI-cut'
           test "$(unzip -Z1 "${zips[0]}" \
-            'OpenChatCut.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework')" = \
-            'OpenChatCut.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework'
+            'AI-cut.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework')" = \
+            'AI-cut.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework'
           unzip -q "${zips[0]}" -d "$zip_dir"
-          zipped_app="$zip_dir/OpenChatCut.app"
-          test -x "$zipped_app/Contents/MacOS/OpenChatCut"
-          "$zipped_app/Contents/MacOS/OpenChatCut"
+          zipped_app="$zip_dir/AI-cut.app"
+          test -x "$zipped_app/Contents/MacOS/AI-cut"
+          "$zipped_app/Contents/MacOS/AI-cut"
           case "$(uname -m)" in
             arm64) runtime_arch='mac-arm64' ;;
             x86_64) runtime_arch='mac-x64' ;;
             *) echo "Unsupported macOS architecture: $(uname -m)" >&2; exit 1 ;;
           esac
-          render_runtime="OpenChatCut.app/Contents/Resources/chrome-headless-shell/$runtime_arch/chrome-headless-shell-$runtime_arch/chrome-headless-shell"
+          render_runtime="AI-cut.app/Contents/Resources/chrome-headless-shell/$runtime_arch/chrome-headless-shell-$runtime_arch/chrome-headless-shell"
           test "$(unzip -Z1 "${zips[0]}" "$render_runtime")" = "$render_runtime"
           test -x "$zip_dir/$render_runtime"
 
@@ -199,7 +199,7 @@ jobs:
               throw "NSIS installer exited with $($install.ExitCode)"
             }
 
-            $installedExe = Join-Path $installDir 'OpenChatCut.exe'
+            $installedExe = Join-Path $installDir 'AI-cut.exe'
             if (-not (Test-Path -LiteralPath $installedExe -PathType Leaf)) {
               throw "NSIS installer did not create $installedExe"
             }
@@ -341,9 +341,9 @@ jobs:
           test -f release-files/latest-x64-mac.yml
           test -f release-files/latest-x64.yml
           test -f release-files/latest-x64-linux.yml
-          test -f "release-files/OpenChatCut-${EXPECTED_VERSION}-arm64.zip.blockmap"
-          test -f "release-files/OpenChatCut-${EXPECTED_VERSION}-x64.zip.blockmap"
-          test -f "release-files/OpenChatCut-${EXPECTED_VERSION}-x64.exe.blockmap"
+          test -f "release-files/AI-cut-${EXPECTED_VERSION}-arm64.zip.blockmap"
+          test -f "release-files/AI-cut-${EXPECTED_VERSION}-x64.zip.blockmap"
+          test -f "release-files/AI-cut-${EXPECTED_VERSION}-x64.exe.blockmap"
 
       - name: Generate checksums
         working-directory: release-files

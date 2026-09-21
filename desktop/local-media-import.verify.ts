@@ -21,8 +21,8 @@ import {
 const mainSource = await readFile(new URL('./main.ts', import.meta.url), 'utf8');
 assert.match(
   mainSource,
-  /createLocalMediaImportHandler\(importLocalMedia\)/,
-  'desktop main must bind native reference imports',
+  /createLocalMediaImportHandler\([\s\S]*?\(sourcePath, originalName\) => importLocalMedia\(sourcePath, originalName\)/,
+  'desktop main must keep native reference imports in the stable local profile',
 );
 
 assert.equal(hasAlphaPixelFormat('yuva444p10le'), true, 'ProRes 4444 alpha must be detected');

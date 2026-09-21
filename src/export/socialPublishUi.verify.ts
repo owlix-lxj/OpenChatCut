@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const panel = await readFile(new URL('./SocialPublishPanel.tsx', import.meta.url), 'utf8');
+const css = await readFile(new URL('./socialPublish.css', import.meta.url), 'utf8');
+const shell = await readFile(new URL('./ExportDialogShell.tsx', import.meta.url), 'utf8');
+assert.doesNotMatch(panel, /3\. 草稿任务|尚无草稿任务|cc-publish-job|aria-label="发布任务"/);
+assert.doesNotMatch(shell, /账号 · 草稿任务/);
+assert.match(panel, /className="cc-publish-submit"[\s\S]*?上传并准备草稿/);
+assert.match(css, /\.cc-publish-submit\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*center;/);
+assert.match(panel, /active\.phase === 'review'[\s\S]*?api\.saveDraft\(active\.id\)/, 'review/save must remain reachable without history cards');
+assert.match(panel, /api\.cancel\(active\.id\)/, 'pending uploads remain cancellable');
+assert.match(panel, /previous && activePublishPhase\(previous\) && !activePublishPhase\(job.phase\)/);
+assert.match(panel, /if \(failed.length\) setError/);
+assert.match(panel, /if \(finished.length\) setNotice/);
+assert.doesNotMatch(panel, /snapshot\.bridge\?\.detail|内置发布服务|GEO/);
+assert.match(panel, /element\?\.showModal\(\)/, 'global loading must block background interaction');
+assert.match(panel, /finally \{ setOpening\(false\); \}/, 'both success and failure dismiss loading');
+assert.match(panel, /onCancel=\{event => event.preventDefault\(\)\}/);
+assert.match(css, /prefers-reduced-motion: reduce/);
+console.log('Platform draft UI: no history module, centered CTA, inline review/cancel and completion/error feedback passed');

@@ -34,6 +34,8 @@ export type PublicUrlTransport = (request: PinnedPublicRequest) => Promise<Respo
 
 export interface SafePublicFetchInit {
   method?: 'GET' | 'HEAD';
+  /** Return redirect responses for callers that validate and rewrite each hop. */
+  redirect?: 'follow' | 'manual';
   headers?: HeadersInit;
   signal?: AbortSignal;
   cache?: RequestCache;
@@ -423,7 +425,7 @@ export async function safePublicFetch(input: string | URL, init: SafePublicFetch
       throw error;
     }
     const location = response.headers.get('location');
-    if (!REDIRECT_STATUSES.has(response.status) || !location) return response;
+    if (init.redirect === 'manual' || !REDIRECT_STATUSES.has(response.status) || !location) return response;
     await response.body?.cancel().catch(() => undefined);
     init.signal?.throwIfAborted();
     if (redirects >= maxRedirects) throw new UnsafePublicUrlError('too many redirects');

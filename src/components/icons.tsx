@@ -139,7 +139,7 @@ export function BrandMark({ size = 16 }: { size?: number }) {
       src={`${import.meta.env.BASE_URL}aicut-icon.png`}
       alt=""
       aria-hidden
-      width={Math.round(size * 1.6)}
+      width={size}
       height={size}
       style={{ display: 'block', flexShrink: 0, objectFit: 'contain' }}
     />

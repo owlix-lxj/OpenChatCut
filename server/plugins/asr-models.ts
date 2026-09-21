@@ -11,8 +11,8 @@ import type { Plugin } from 'vite';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { rm, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { copyFile, link, mkdir, rename, rm, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   ASR_MODELS,
   asrModelEntry,
@@ -30,6 +30,47 @@ const inspections = new Map<string, {
   fingerprint: string;
   result: { downloaded: boolean; bytes: number };
 }>();
+
+function desktopNativeRuntime(): boolean {
+  return Boolean(process.versions.electron);
+}
+
+function bundledGgmlCandidates(fileName: string): string[] {
+  return [
+    join(process.cwd(), 'public', 'whisper-models', fileName),
+    join(process.resourcesPath ?? '', 'dist', 'whisper-models', fileName),
+    join(process.resourcesPath ?? '', 'whisper-models', fileName),
+  ];
+}
+
+async function seedBundledGgml(entry: AsrModelEntry, cacheDir: string, signal?: AbortSignal): Promise<void> {
+  const ggml = entry.ggmlFile;
+  if (!ggml || !desktopNativeRuntime()) return;
+  const destination = join(cacheDir, 'ggml', ggml.fileName);
+  const expected = { path: destination, sizeBytes: ggml.sizeBytes, sha256: ggml.sha256 };
+  if (await modelFileVerified(destination, expected, signal)) return;
+  for (const source of bundledGgmlCandidates(ggml.fileName)) {
+    if (source === destination) continue;
+    if (!(await modelFileVerified(source, { ...expected, path: source }, signal))) continue;
+    const temporary = `${destination}.${process.pid}.bundled.tmp`;
+    await mkdir(dirname(destination), { recursive: true });
+    await rm(temporary, { force: true });
+    try {
+      // Bundled Large v3 is ~3.1GB. A hard link avoids doubling disk usage
+      // when the application and model cache are on the same filesystem.
+      await link(source, temporary);
+    } catch {
+      await copyFile(source, temporary);
+    }
+    if (!(await modelFileVerified(temporary, { ...expected, path: temporary }, signal))) {
+      await rm(temporary, { force: true });
+      throw new Error('bundled native ASR model failed integrity verification');
+    }
+    await rm(destination, { force: true });
+    await rename(temporary, destination);
+    return;
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   if (res.destroyed || res.writableEnded) return;
@@ -163,17 +204,41 @@ export async function inspectAsrModel(
   return result;
 }
 
+/** Desktop whisper.cpp only needs the catalog's verified GGML companion. The
+ * browser/WebGPU runtime still uses inspectAsrModel() and its ONNX files. */
+export async function inspectNativeAsrModel(
+  entry: AsrModelEntry,
+  cacheDir = modelCacheDir(),
+  signal?: AbortSignal,
+): Promise<{ downloaded: boolean; bytes: number }> {
+  const ggml = entry.ggmlFile;
+  if (!ggml) return { downloaded: false, bytes: 0 };
+  await seedBundledGgml(entry, cacheDir, signal);
+  const path = join(cacheDir, 'ggml', ggml.fileName);
+  const downloaded = await modelFileVerified(
+    path,
+    { path, sizeBytes: ggml.sizeBytes, sha256: ggml.sha256 },
+    signal,
+  );
+  return { downloaded, bytes: downloaded ? ggml.sizeBytes : 0 };
+}
+
 function catalogState(): Promise<Array<{
   id: string; modelId: string; label: string; sizeLabel: string; language: string;
   downloaded: boolean; bytes: number; task?: AsrDownloadTask;
 }>> {
   return Promise.all(ASR_MODELS.map(async (entry) => {
-    const state = await inspectAsrModel(entry);
+    const nativeDesktop = desktopNativeRuntime() && Boolean(entry.ggmlFile);
+    const state = nativeDesktop
+      ? await inspectNativeAsrModel(entry)
+      : await inspectAsrModel(entry);
     return {
       id: entry.id,
       modelId: entry.modelId,
       label: entry.label,
-      sizeLabel: entry.sizeLabel,
+      sizeLabel: nativeDesktop && entry.ggmlFile
+        ? `约 ${Math.ceil(entry.ggmlFile.sizeBytes / 1_000_000)}MB${entry.id === 'large-v3-turbo' ? '（桌面版内置）' : ''}`
+        : entry.sizeLabel,
       language: entry.language,
       downloaded: state.downloaded,
       bytes: state.bytes,
@@ -188,20 +253,21 @@ async function startDownload(id: string): Promise<AsrDownloadTask> {
   const existing = tasks.get(id);
   if (existing && existing.status === 'downloading') return existing;
   const ggml = entry.ggmlFile;
+  const modelFiles = desktopNativeRuntime() && ggml ? [] : entry.files;
   const task: AsrDownloadTask = {
     id,
     status: 'downloading',
     bytesDone: 0,
-    bytesTotal: entry.files.reduce((total, file) => total + file.sizeBytes, 0)
+    bytesTotal: modelFiles.reduce((total, file) => total + file.sizeBytes, 0)
       + (ggml ? ggml.sizeBytes : 0),
     filesDone: 0,
-    filesTotal: entry.files.length + (ggml ? 1 : 0),
+    filesTotal: modelFiles.length + (ggml ? 1 : 0),
   };
   inspections.delete(`${modelCacheDir()}\0${entry.modelId}`);
   tasks.set(id, task);
   void (async () => {
     try {
-      for (const file of entry.files) {
+      for (const file of modelFiles) {
         const path = join(modelCacheDir(), entry.modelId, file.path);
         if (await modelFileVerified(path, file)) {
           task.filesDone += 1;
@@ -222,11 +288,20 @@ async function startDownload(id: string): Promise<AsrDownloadTask> {
         const ggmlFile = { path: ggmlPath, sizeBytes: ggml.sizeBytes, sha256: ggml.sha256 };
         if (!(await modelFileVerified(ggmlPath, ggmlFile))) {
           await rm(ggmlPath, { force: true });
-          await downloadModelFile(
-            { modelId: 'ggerganov/whisper.cpp', revision: ggml.revision, filePath: ggml.fileName },
-            undefined,
-            { expectedBytes: ggml.sizeBytes, expectedSha256: ggml.sha256 },
-          );
+          // Builds before the desktop-native path was introduced accidentally
+          // stored GGML beside its source repository. Migrate that verified
+          // file in place so existing users do not download it twice.
+          const legacyPath = join(modelCacheDir(), 'ggerganov', 'whisper.cpp', ggml.fileName);
+          if (await modelFileVerified(legacyPath, { ...ggmlFile, path: legacyPath })) {
+            await mkdir(dirname(ggmlPath), { recursive: true });
+            await rename(legacyPath, ggmlPath);
+          } else {
+            await downloadModelFile(
+              { modelId: 'ggerganov/whisper.cpp', revision: ggml.revision, filePath: ggml.fileName },
+              ggmlPath,
+              { expectedBytes: ggml.sizeBytes, expectedSha256: ggml.sha256 },
+            );
+          }
         }
         task.filesDone += 1;
         task.bytesDone += ggml.sizeBytes;

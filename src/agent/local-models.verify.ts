@@ -172,8 +172,8 @@ try {
     platformChoiceIds,
     'platform mode exposes only its two fixed hosted models',
   );
-  assert.equal(getAgentModelSnapshot().activeId, platformChoiceIds[0],
-    'a stale local-backend preference falls back to a hosted model');
+  assert.equal(getAgentModelSnapshot().activeId, 'openai:gpt-5.6-terra',
+    'a removed hosted-provider preference falls back to the first configured hosted provider');
 
   applyCodexAgentStatus(signedInCodex, 'gpt-5.6-sol', 'high', [{
     id: 'gpt-5.6-sol',

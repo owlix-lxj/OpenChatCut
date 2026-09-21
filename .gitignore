@@ -4,6 +4,8 @@ dist/
 desktop-dist/
 server-dist/
 release/
+*.zip
+*.7z
 coverage/
 .nyc_output/
 playwright-report/
@@ -88,6 +90,9 @@ MODEL-OPT-PLAN.md
 # `git add -A`, and CI died with MODULE_NOT_FOUND on a file that exists locally.
 /scripts/*
 !/scripts/sync-mediapipe.mjs
+!/scripts/sync-whisper-model.mjs
+!/scripts/sync-yt-dlp.mjs
+!/scripts/desktop-dev-app.mjs
 # Stable regressions are *.verify.* by convention (see the *.check.* rule
 # above), so they are never local-only.
 !/scripts/*.verify.mjs
@@ -98,6 +103,8 @@ MODEL-OPT-PLAN.md
 node_modules
 public/mediapipe/
 public/whisper-cli/
+public/whisper-models/
+public/yt-dlp/
 
 
 # Local npm cache

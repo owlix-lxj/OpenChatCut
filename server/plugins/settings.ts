@@ -30,6 +30,7 @@ import {
   PLATFORM_DEFAULT_ROUTES,
   PLATFORM_LLM_PROVIDERS,
   PLATFORM_MODE_ENV,
+  PLATFORM_VOICE_PROVIDERS,
 } from '../../shared/platform-config.ts';
 
 const ISOLATED_R2_SETTINGS = [
@@ -54,23 +55,22 @@ export function assertProfileSensitiveSettingsPatch(
   }
 }
 
-/** Provider credentials, endpoints, model ids, and provider routing belong to
- * the platform environment in hosted mode. Keep this check server-side even
- * though the UI is read-only: browser requests are not a security boundary. */
+/** Platform-owned Agent and image credentials remain immutable in hosted
+ * mode. Voice, video, and transcription providers are user-managed desktop
+ * integrations, so their settings intentionally remain writable. */
 export function assertPlatformManagedSettingsPatch(
   patch: Readonly<Record<string, unknown>>,
   platformManaged = isPlatformManaged(),
 ): void {
   if (!platformManaged) return;
-  const providerPrefixes = [
-    'LLM_', 'IMAGE_', 'GEMINI_', 'WAVESPEED_', 'BYTEPLUS_', 'ELEVENLABS_',
-    'DOUBAO_', 'INWORLD_', 'FISHAUDIO_', 'SPEECHIFY_', 'SEEDANCE_', 'JIMENG_',
-    'KLING_', 'MINIMAX_', 'MUREKA_', 'ATLASCLOUD_', 'SONILO_',
-  ];
   const protectedName = (name: string): boolean =>
     name === PLATFORM_MODE_ENV
-    || providerPrefixes.some((prefix) => name.startsWith(prefix))
-    || /^PREFERRED_(IMAGE|VOICE|VIDEO|MUSIC|TRANSCRIPTION)_/.test(name);
+    || name === 'LLM_PROVIDER'
+    || name.startsWith('LLM_OPENAI_')
+    || name.startsWith('LLM_DEEPSEEK_')
+    || name.startsWith('LLM_QWEN_')
+    || name.startsWith('IMAGE_')
+    || name === 'PREFERRED_IMAGE_VENDOR';
   const blocked = Object.keys(patch).find(protectedName);
   if (blocked) throw new Error(`平台模式下 ${blocked} 由平台统一配置，用户无需填写或修改`);
 }
@@ -115,10 +115,17 @@ function settingsBody(restartRequired = false) {
   const configured = readDataDirPointer() ?? '';
   const models = { ...status.models };
   if (status.platformManaged) {
-    models.LLM_PROVIDER ||= 'openai';
-    models.PREFERRED_IMAGE_VENDOR ||= PLATFORM_DEFAULT_ROUTES.image;
-    models.PREFERRED_VOICE_VENDOR ||= PLATFORM_DEFAULT_ROUTES.voice;
+    if (!(PLATFORM_LLM_PROVIDERS as readonly string[]).includes(models.LLM_PROVIDER)) {
+      models.LLM_PROVIDER = 'openai';
+    }
+    models.PREFERRED_IMAGE_VENDOR = PLATFORM_DEFAULT_ROUTES.image;
+    if (!(PLATFORM_VOICE_PROVIDERS as readonly string[]).includes(models.PREFERRED_VOICE_VENDOR)) {
+      models.PREFERRED_VOICE_VENDOR = PLATFORM_DEFAULT_ROUTES.voice;
+    }
     models.PREFERRED_VIDEO_VENDOR ||= PLATFORM_DEFAULT_ROUTES.video;
+    if (!models.PREFERRED_TRANSCRIPTION_PROVIDER || models.PREFERRED_TRANSCRIPTION_PROVIDER === 'qwen') {
+      models.PREFERRED_TRANSCRIPTION_PROVIDER = PLATFORM_DEFAULT_ROUTES.transcription;
+    }
     for (const provider of PLATFORM_LLM_PROVIDERS) {
       const names = `LLM_${provider.toUpperCase()}_`;
       const defaults = PLATFORM_DEFAULT_LLM_CONFIG[provider];

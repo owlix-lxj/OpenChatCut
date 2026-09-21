@@ -139,12 +139,15 @@ export const ASR_MODELS: readonly AsrModelEntry[] = [
       { path: 'onnx/decoder_model_merged_quantized.onnx', sizeBytes: 439997434, sha256: 'b4ab1c92a9bcf8c8fdc49deacb57ac51b707d5248bc7868af42371b896c3ae52' },
     ],
     ggmlFile: {
-      fileName: 'ggml-large-v3-turbo-q5_0.bin', sizeBytes: 574041195,
-      sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2',
+      // Desktop deliberately maps this compatibility tier to the complete,
+      // non-quantized large-v3 model. The browser keeps the timestamped Turbo
+      // ONNX graph; Electron gets maximum local recognition accuracy.
+      fileName: 'ggml-large-v3.bin', sizeBytes: 3095033483,
+      sha256: '64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2',
       revision: '5359861c739e955e79d9a303bcbc70fb988958b1',
     },
-    label: 'Whisper Large v3 Turbo', sizeLabel: '约 1.1GB', language: '中文 / English / Italiano / Русский',
-    note: '多语言精度最强；浏览器端较慢，桌面端本地推理体验最佳。',
+    label: 'Whisper Large v3', sizeLabel: '约 1.1GB', language: '中文 / English / Italiano / Русский',
+    note: '桌面版使用完整精度 Large v3；浏览器兼容模式使用 Turbo。',
   },
 ];
 

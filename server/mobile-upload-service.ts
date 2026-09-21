@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -8,19 +8,6 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { isSafeUploadName, uploadDir } from './media-dir.ts';
 import { currentPlatformStorageScope, withPlatformStorageScope } from './platform-storage-scope.ts';
-
-/** OSS upload primitives injected by the platform plugin; keep this module free of a hard
- * dependency on the platform integration so it stays testable on its own. */
-export interface MobileOssHooks {
-  signOssUpload: (token: string, input: { fileName: string; contentType: string; sizeBytes: number })
-    => Promise<{ uploadUrl: string; objectKey: string; sourceUrl: string; type: string }>;
-  createMaterial: (token: string, input: {
-    type: string; name: string; objectKey: string; sourceUrl: string; mimeType: string; sizeBytes: number;
-  }) => Promise<void>;
-  registerOssRef: (directory: string, name: string, record: {
-    sourceUrl: string; objectKey: string; bytes: number; contentType: string; contentHash?: string;
-  }) => Promise<void>;
-}
 
 const DEFAULT_SESSION_TTL_MS = 10 * 60_000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024 * 1024;
@@ -68,9 +55,6 @@ interface MobileUploadSession extends MobileUploadSessionSnapshot {
    * are written under this scope — otherwise they land in the unscoped dir and
    * the scoped editor cannot load them (they show as offline/lost). */
   scope: string | undefined;
-  /** Platform session token captured from the editor request. When present (and OSS hooks are
-   * wired), phone uploads stream straight to the tenant's OSS library instead of local disk. */
-  platformToken: string | undefined;
 }
 
 export type MobilePageLocale = 'zh' | 'en' | 'it' | 'ru';
@@ -81,9 +65,6 @@ interface MobileUploadServiceOptions {
   uploadDirectory?: () => string;
   maxBytes?: number;
   sessionTtlMs?: number;
-  afterSave?: (name: string, filePath: string, mime: string) => Promise<void>;
-  oss?: MobileOssHooks;
-  log?: (message: string) => void;
 }
 
 class UploadError extends Error {
@@ -229,8 +210,7 @@ export class MobileUploadService {
   private port: number | null = null;
   private starting: Promise<void> | null = null;
   private readonly options: Required<Pick<MobileUploadServiceOptions,
-    'bindHost' | 'addresses' | 'uploadDirectory' | 'maxBytes' | 'sessionTtlMs' | 'log'>> &
-    Pick<MobileUploadServiceOptions, 'afterSave' | 'oss'>;
+    'bindHost' | 'addresses' | 'uploadDirectory' | 'maxBytes' | 'sessionTtlMs'>>;
 
   constructor(options: MobileUploadServiceOptions = {}) {
     this.options = {
@@ -239,16 +219,12 @@ export class MobileUploadService {
       uploadDirectory: options.uploadDirectory ?? uploadDir,
       maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
       sessionTtlMs: options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS,
-      afterSave: options.afterSave,
-      oss: options.oss,
-      log: options.log ?? (() => undefined),
     };
   }
 
   async createSession(
     locale: MobilePageLocale = 'zh',
     publicOrigin?: string,
-    platformToken?: string,
   ): Promise<MobileUploadSessionSnapshot> {
     // Capture the caller's platform scope now, while still on the editor
     // request's async context, so phone uploads write to the same tenant/user dir.
@@ -270,7 +246,7 @@ export class MobileUploadService {
     }
     const timer = setTimeout(() => { void this.closeSession(id); }, this.options.sessionTtlMs);
     timer.unref();
-    const session: MobileUploadSession = { id, token, locale, urls, expiresAt, files: [], closing: false, timer, activeUploads: new Set(), scope, platformToken };
+    const session: MobileUploadSession = { id, token, locale, urls, expiresAt, files: [], closing: false, timer, activeUploads: new Set(), scope };
     this.sessions.set(id, session);
     return this.snapshot(session);
   }
@@ -389,16 +365,6 @@ export class MobileUploadService {
     if (!descriptor) throw new UploadError(415, 'unsupported media type');
     const storedName = `${randomUUID()}${descriptor.extension}`;
     const directory = this.options.uploadDirectory();
-    // Platform mode: stream straight to the tenant's OSS library. The bytes pass through this
-    // process to OSS without ever being written to local disk.
-    if (session.platformToken && this.options.oss && declared != null && declared > 0) {
-      const record = await this.receiveUploadToOss(
-        session, storedName, directory, originalName, descriptor, declared, req,
-      );
-      session.files = [...session.files, record];
-      sendJson(res, 200, record);
-      return;
-    }
     const partPath = join(directory, `.${storedName}.part`);
     const finalPath = join(directory, storedName);
     await mkdir(directory, { recursive: true });
@@ -409,11 +375,6 @@ export class MobileUploadService {
       throw new UploadError(415, 'media content does not match its declared type');
     }
     await rename(partPath, finalPath);
-    try {
-      await this.options.afterSave?.(storedName, finalPath, descriptor.mime);
-    } catch (error) {
-      this.options.log(`[mobile-upload] cloud mirror failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
     const record: MobileUploadRecord = {
       id: randomUUID(), name: originalName, mime: descriptor.mime, bytes,
       path: `/media/uploads/${storedName}`, createdAt: Date.now(),
@@ -422,81 +383,4 @@ export class MobileUploadService {
     sendJson(res, 200, record);
   }
 
-  /** Stream the phone's request body straight to OSS (no local disk), validating the media
-   * header first and computing the content hash on the fly, then register it as a tenant material. */
-  private async receiveUploadToOss(
-    session: MobileUploadSession,
-    storedName: string,
-    directory: string,
-    originalName: string,
-    descriptor: { extension: string; mime: string },
-    declared: number,
-    req: IncomingMessage,
-  ): Promise<MobileUploadRecord> {
-    const oss = this.options.oss!;
-    const token = session.platformToken!;
-    const contentType = descriptor.mime;
-
-    // Buffer just enough of the head to validate the media signature before signing or
-    // streaming anything to OSS — an invalid file never reaches the tenant library.
-    const reader = (req as Readable)[Symbol.asyncIterator]();
-    const buffered: Buffer[] = [];
-    let headLen = 0;
-    let drained = false;
-    while (headLen < 64) {
-      const next = await reader.next();
-      if (next.done) { drained = true; break; }
-      const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as Uint8Array);
-      buffered.push(chunk);
-      headLen += chunk.length;
-    }
-    if (!matchesMediaSignature(Buffer.concat(buffered).subarray(0, 64), descriptor.mime)) {
-      req.destroy();
-      throw new UploadError(415, 'media content does not match its declared type');
-    }
-
-    const credential = await oss.signOssUpload(token, { fileName: originalName, contentType, sizeBytes: declared });
-    const hash = createHash('sha256');
-    const maxBytes = this.options.maxBytes;
-    let bytes = 0;
-    async function* body(): AsyncGenerator<Buffer> {
-      for (const chunk of buffered) {
-        bytes += chunk.length;
-        if (bytes > maxBytes) throw new UploadError(413, 'file too large');
-        hash.update(chunk);
-        yield chunk;
-      }
-      if (!drained) {
-        for (let next = await reader.next(); !next.done; next = await reader.next()) {
-          const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as Uint8Array);
-          bytes += chunk.length;
-          if (bytes > maxBytes) throw new UploadError(413, 'file too large');
-          hash.update(chunk);
-          yield chunk;
-        }
-      }
-    }
-
-    const putResponse = await fetch(credential.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType, 'Content-Length': String(declared) },
-      body: Readable.from(body()) as unknown as BodyInit,
-      duplex: 'half',
-    } as RequestInit & { duplex: 'half' });
-    if (!putResponse.ok) throw new UploadError(502, `OSS upload failed: ${putResponse.status}`);
-    if (bytes === 0) throw new UploadError(400, 'empty body');
-
-    const contentHash = hash.digest('hex');
-    await oss.createMaterial(token, {
-      type: credential.type, name: originalName, objectKey: credential.objectKey,
-      sourceUrl: credential.sourceUrl, mimeType: contentType, sizeBytes: bytes,
-    });
-    await oss.registerOssRef(directory, storedName, {
-      sourceUrl: credential.sourceUrl, objectKey: credential.objectKey, bytes, contentType, contentHash,
-    });
-    return {
-      id: randomUUID(), name: originalName, mime: descriptor.mime, bytes,
-      path: `/media/uploads/${storedName}`, createdAt: Date.now(),
-    };
-  }
 }

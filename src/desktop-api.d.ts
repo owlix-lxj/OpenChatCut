@@ -1,4 +1,5 @@
 export {};
+import type { SocialPublishApi } from '../shared/social-publish';
 import type {
   ProjectStoreRequest,
   ProjectStoreResponse,
@@ -29,6 +30,7 @@ import type {
   DirectoryWatchStartResult,
 } from '../shared/directory-import';
 import type { TranscriptWindowPayload } from '../shared/transcript-window';
+import type { ResolvedDesktopVideoLink } from '../shared/video-link-resolver';
 interface DesktopExportDirectoryGrant {
   readonly grantId: string;
   readonly label: string;
@@ -59,8 +61,10 @@ interface DesktopInferenceApi {
 declare global {
   interface Window {
     openChatCutDesktop?: {
+      socialPublish: SocialPublishApi;
       getPathForFile(file: File): string | undefined;
       platform: NodeJS.Platform;
+      resolveVideoLink(value: string): Promise<ResolvedDesktopVideoLink>;
       selectDirectory(defaultPath?: string): Promise<string | null>;
       selectExportDirectory(): Promise<DesktopExportDirectoryGrant | null>;
       selectExportFile(suggestedFilename: string): Promise<DesktopExportFileGrant | null>;

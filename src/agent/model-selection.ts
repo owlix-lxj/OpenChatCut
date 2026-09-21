@@ -102,7 +102,8 @@ function apiChoices(
     if (platformManaged && !isPlatformLlmProvider(preset.id)) return [];
     const names = llmProviderConfigNames(preset.id);
     const savedModel = models[names.model]?.trim() ?? '';
-    if (isLocalLlmProvider(preset.id) ? !savedModel : !keys[names.apiKey]?.configured) return [];
+    if (!platformManaged
+      && (isLocalLlmProvider(preset.id) ? !savedModel : !keys[names.apiKey]?.configured)) return [];
     const model = platformManaged && isPlatformLlmProvider(preset.id)
       ? PLATFORM_DEFAULT_LLM_CONFIG[preset.id].model
       : savedModel || defaultModelForProvider(preset.id);

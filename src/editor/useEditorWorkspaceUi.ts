@@ -44,6 +44,8 @@ export interface EditorWorkspaceDialogs {
   setShowVersions: Dispatch<SetStateAction<boolean>>;
   showShortcuts: boolean;
   setShowShortcuts: Dispatch<SetStateAction<boolean>>;
+  showSettings: boolean;
+  setShowSettings: Dispatch<SetStateAction<boolean>>;
   digitalHumanOpenNonce: number;
   openDigitalHuman: () => void;
   shortcutApiRef: RefObject<TimelineShortcutApi | null>;
@@ -66,6 +68,7 @@ export function useEditorWorkspaceDialogs({
   const [showVersions, setShowVersions] = useState(false);
 
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [digitalHumanOpenNonce, setDigitalHumanOpenNonce] = useState(0);
   const openDigitalHuman = useCallback(() => setDigitalHumanOpenNonce((value) => value + 1), []);
   const shortcutApiRef = useRef<TimelineShortcutApi | null>(null);
@@ -82,6 +85,8 @@ export function useEditorWorkspaceDialogs({
     setShowVersions,
     showShortcuts,
     setShowShortcuts,
+    showSettings,
+    setShowSettings,
     digitalHumanOpenNonce,
     openDigitalHuman,
     shortcutApiRef,

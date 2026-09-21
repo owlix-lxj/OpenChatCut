@@ -67,11 +67,11 @@ const hasMacSigningCertificate = Boolean(process.env.CSC_LINK || process.env.CSC
 
 export default {
   appId: 'dev.openchatcut.app',
-  productName: 'OpenChatCut',
+  productName: 'AI-cut',
   artifactName: '${productName}-${version}-${arch}.${ext}',
   // Custom URL scheme for platform desktop login: the browser redirects to openchatcut://auth?...
   // and the OS hands the deep link to the app (macOS Info.plist + Windows registry).
-  protocols: [{ name: 'OpenChatCut', schemes: ['openchatcut'] }],
+  protocols: [{ name: 'AI-cut', schemes: ['openchatcut'] }],
   directories: { output: 'release' },
   // 7z LZMA maximum compression for the distributable installers (dmg/zip/nsis/AppImage).
   // Trade-off: noticeably slower packaging time in exchange for a smaller final download.

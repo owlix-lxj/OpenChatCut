@@ -75,6 +75,17 @@ await assert.rejects(
 );
 assert.equal(redirectTransportCalls, 1, 'a private redirect target must be rejected before a second transport');
 
+let manualRedirectCalls = 0;
+const manualRedirect = await safePublicFetch('https://public.example/share', {
+  redirect: 'manual', resolver: publicResolver,
+  transport: async () => {
+    manualRedirectCalls++;
+    return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/private' } });
+  },
+});
+assert.equal(manualRedirect.status, 302);
+assert.equal(manualRedirectCalls, 1, 'manual mode returns the redirect without fetching its target');
+
 let resolverCalls = 0;
 let pinnedAddress = '';
 let observedHost = '';

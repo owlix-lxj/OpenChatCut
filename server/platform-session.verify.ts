@@ -6,10 +6,19 @@ process.env.OPENCHATCUT_PLATFORM_MODE = 'platform';
 process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET = 'platform-session-test-secret-at-least-32-chars';
 
 const {
+  clearDesktopPlatformSession,
+  activePlatformSessionToken,
+  configureDesktopPlatformSessionProvider,
+  currentPlatformSession,
+  decodePlatformSessionClaims,
+  desktopPlatformSessionConfigured,
   mintPlatformSession,
+  platformSession,
   platformStorageScope,
   signPlatformSession,
   verifyPlatformSession,
+  withDesktopPlatformStorageScope,
+  withPlatformSession,
 } = await import('./platform-session.ts');
 const {
   logicalProjectStoreKey,
@@ -45,7 +54,51 @@ assert.equal(verifyPlatformSession(ticket, 'session'), null);
 
 const session = mintPlatformSession(launch, 3600);
 assert.equal(verifyPlatformSession(session.token, 'session')?.tenant_id, 'tenant-a');
+assert.equal(decodePlatformSessionClaims(session.token, 'session')?.sub, 'user-a');
+assert.equal(currentPlatformSession(), null);
+await withPlatformSession(session, async () => {
+  assert.equal(currentPlatformSession()?.token, session.token);
+  await Promise.resolve();
+  assert.equal(currentPlatformSession()?.claims.tenant_id, 'tenant-a');
+});
+assert.equal(currentPlatformSession(), null);
 assert.notEqual(platformStorageScope(session.claims), platformStorageScope({ ...session.claims, sub: 'user-b' }));
+
+// Desktop mode has no signing secret. The main-process provider supplies the
+// gateway-issued token and the local server only decodes identity/scope.
+const savedSecret = process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET;
+delete process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET;
+let activeDesktopToken: string | null = session.token;
+configureDesktopPlatformSessionProvider(
+  () => activeDesktopToken,
+  () => { activeDesktopToken = null; },
+);
+assert.equal(desktopPlatformSessionConfigured(), true);
+assert.equal(platformSession({ headers: {} } as never)?.claims.tenant_id, 'tenant-a');
+assert.equal(activePlatformSessionToken(), session.token);
+assert.notEqual(platformStorageScope(session.claims), platformStorageScope({ ...session.claims, sub: 'user-b' }));
+assert.equal(
+  withDesktopPlatformStorageScope(() => scopedPlatformDirectory('/srv/media')),
+  '/srv/media',
+  'desktop IPC filesystem work remains in the stable device-local profile',
+);
+configureDesktopPlatformSessionProvider(() => 'invalid-token');
+assert.equal(
+  withDesktopPlatformStorageScope(() => scopedPlatformDirectory('/srv/media')),
+  '/srv/media',
+  'desktop local storage does not depend on the remote session lifetime',
+);
+configureDesktopPlatformSessionProvider(null);
+assert.equal(desktopPlatformSessionConfigured(), false);
+assert.equal(await clearDesktopPlatformSession(), false);
+assert.equal(withDesktopPlatformStorageScope(() => scopedPlatformDirectory('/srv/media')), '/srv/media');
+process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET = savedSecret;
+
+let desktopCleared = 0;
+configureDesktopPlatformSessionProvider(() => session.token, () => { desktopCleared += 1; });
+assert.equal(await clearDesktopPlatformSession(), true);
+assert.equal(desktopCleared, 1, 'desktop logout invokes its encrypted-session clearer');
+configureDesktopPlatformSessionProvider(null);
 
 await withPlatformStorageScope('scope-a', async () => {
   assert.equal(physicalProjectStoreKey('project:one'), 'platform-scope:scope-a:project:one');
@@ -103,5 +156,53 @@ assert.deepEqual(await scopedResponse.json(), {
 });
 httpServer.close();
 await once(httpServer, 'close');
+
+// The desktop embedded server never verifies the remote signature. It decodes
+// identity for local scoping and forwards the untouched token; the gateway is
+// the authorization boundary on every platform request.
+delete process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET;
+let gatewayDesktopToken: string | null = session.token;
+configureDesktopPlatformSessionProvider(
+  () => gatewayDesktopToken,
+  () => { gatewayDesktopToken = null; },
+);
+const gateway = createServer((req, res) => {
+  assert.equal(req.headers.authorization, `Bearer ${session.token}`);
+  assert.equal(req.url, '/v1/video-editor/materials?page=1');
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ items: [{ id: 'material-a' }] }));
+});
+gateway.listen(0, '127.0.0.1');
+await once(gateway, 'listening');
+const gatewayAddress = gateway.address();
+assert(gatewayAddress && typeof gatewayAddress === 'object');
+process.env.OPENCHATCUT_PLATFORM_API_BASE_URL = `http://127.0.0.1:${gatewayAddress.port}`;
+
+const desktopApp = createMiniConnect((error) => { throw error; });
+const desktopPlugin = platformIntegrationPlugin();
+const configureDesktop = desktopPlugin.configureServer;
+if (typeof configureDesktop !== 'function') throw new Error('platform integration plugin has no configureServer hook');
+configureDesktop.call(desktopPlugin as never, { middlewares: { use: desktopApp.use.bind(desktopApp) } } as never);
+const desktopServer = createServer((req, res) => desktopApp.handle(req, res));
+desktopServer.listen(0, '127.0.0.1');
+await once(desktopServer, 'listening');
+const desktopAddress = desktopServer.address();
+assert(desktopAddress && typeof desktopAddress === 'object');
+const materialsResponse = await fetch(`http://127.0.0.1:${desktopAddress.port}/api/platform/materials?page=1`);
+assert.equal(materialsResponse.status, 200);
+assert.deepEqual(await materialsResponse.json(), { items: [{ id: 'material-a' }] });
+const logoutResponse = await fetch(`http://127.0.0.1:${desktopAddress.port}/api/platform/session/logout`, {
+  method: 'POST',
+});
+assert.equal(logoutResponse.status, 200);
+const loggedOutSession = await fetch(`http://127.0.0.1:${desktopAddress.port}/api/platform/session`);
+assert.equal(loggedOutSession.status, 401, 'desktop logout clears the main-process session provider');
+
+desktopServer.close();
+gateway.close();
+await Promise.all([once(desktopServer, 'close'), once(gateway, 'close')]);
+configureDesktopPlatformSessionProvider(null);
+process.env.OPENCHATCUT_PLATFORM_SESSION_SECRET = savedSecret;
+delete process.env.OPENCHATCUT_PLATFORM_API_BASE_URL;
 
 console.log('platform session and storage scope checks passed');

@@ -18,7 +18,7 @@ assert.deepEqual(
     'ggml-base-q5_1.bin',
     'ggml-small-q5_1.bin',
     'ggml-medium-q5_1.bin',
-    'ggml-large-v3-turbo-q5_0.bin',
+    'ggml-large-v3.bin',
   ],
   'desktop-native GGML resolution covers every supported tier',
 );

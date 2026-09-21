@@ -5,9 +5,10 @@ import { useIdlePrefetch } from '../../ui/idlePrefetch';
 
 export const loadShortcutsDialog = () => import('../../shortcuts/ShortcutsDialog');
 export const loadMediaCleanupDialog = () => import('../../media/MediaCleanupDialog');
+export const loadSettingsDialog = () => import('../settings/SettingsDialog');
 
 const LOADERS = [
-  loadShortcutsDialog, loadMediaCleanupDialog,
+  loadSettingsDialog, loadShortcutsDialog, loadMediaCleanupDialog,
 ];
 
 /** Fetch the dialog chunks once the project list is idle, so opening one is instant. */

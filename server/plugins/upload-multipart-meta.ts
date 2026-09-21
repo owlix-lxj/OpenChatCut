@@ -7,6 +7,7 @@ export const MAX_PARTS = 10_000;
 
 export interface MultipartMeta {
   uploadId: string; name: string; ext: string; assetId?: string; contentType?: string;
+  localOnly?: boolean;
   size: number; partSize: number; partCount: number; createdAt: number; updatedAt: number;
 }
 
@@ -19,7 +20,7 @@ function parseMeta(raw: unknown, uploadId: string): MultipartMeta | null {
   const numbers = [value.size, value.partSize, value.partCount, value.createdAt];
   if (value.uploadId !== uploadId || typeof value.name !== 'string' || typeof value.ext !== 'string' || !/^\.[a-z0-9]{1,16}$/.test(value.ext)
     || !numbers.every((item) => typeof item === 'number' && Number.isFinite(item) && item > 0)
-    || (value.assetId !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(value.assetId)) || (value.contentType !== undefined && (typeof value.contentType !== 'string' || value.contentType.length > 200)) || !Number.isInteger(Number(value.partCount)) || value.partCount! > MAX_PARTS
+    || (value.assetId !== undefined && !/^[a-zA-Z0-9_-]{1,80}$/.test(value.assetId)) || (value.contentType !== undefined && (typeof value.contentType !== 'string' || value.contentType.length > 200)) || (value.localOnly !== undefined && typeof value.localOnly !== 'boolean') || !Number.isInteger(Number(value.partCount)) || value.partCount! > MAX_PARTS
     || value.partCount !== Math.ceil(value.size! / value.partSize!)) return null;
   const updatedAt = typeof value.updatedAt === 'number' && Number.isFinite(value.updatedAt)
     ? value.updatedAt : value.createdAt;

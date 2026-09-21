@@ -1,5 +1,4 @@
 import { t } from '../i18n/locale';
-import { platformManagedClient } from '../platform/platformIntegration';
 import {
   uploadedMediaLocation,
   type UploadedMediaLocation,
@@ -32,56 +31,11 @@ interface UploadPlan {
 
 async function requestUploadPlan(
   file: File,
-  onProgress?: UploadProgress,
+  _onProgress?: UploadProgress,
 ): Promise<UploadPlan | UploadedMediaLocation> {
-  try {
-    const response = await fetch('/upload/presign', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: file.name,
-        contentType: file.type || 'application/octet-stream',
-      }),
-    });
-    if (!response.ok) return { url: `/upload?name=${encodeURIComponent(file.name)}` };
-    const slot: unknown = await response.json();
-    if (!slot || typeof slot !== 'object' || !('uploadUrl' in slot)
-      || typeof slot.uploadUrl !== 'string') {
-      return { url: `/upload?name=${encodeURIComponent(file.name)}` };
-    }
-    const path = 'path' in slot && typeof slot.path === 'string' ? slot.path : undefined;
-    if (!('mode' in slot) || slot.mode !== 'presign') {
-      return { url: slot.uploadUrl, expectedPath: path };
-    }
-    try {
-      await putPresigned(file, slot.uploadUrl, onProgress);
-      if (!path) throw new Error('presigned upload returned no destination path');
-      return await hydratePresignedUpload(path);
-    } catch {
-      return {
-        url: 'proxyUploadUrl' in slot && typeof slot.proxyUploadUrl === 'string'
-          ? slot.proxyUploadUrl
-          : `/upload?name=${encodeURIComponent(file.name)}`,
-        expectedPath: path,
-      };
-    }
-  } catch {
-    return { url: `/upload?name=${encodeURIComponent(file.name)}` };
-  }
-}
-
-async function hydratePresignedUpload(path: string): Promise<UploadedMediaLocation> {
-  const response = await fetch('/upload/hydrate', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-  const value = await response.json().catch(() => null);
-  const location = uploadedMediaLocation(value);
-  if (!response.ok || !location?.sourceContentHash) {
-    throw new Error(responseError(value) ?? 'uploaded media identity is unavailable');
-  }
-  return location;
+  // User-imported media is authoritative on the editor's local disk. Do not ask for
+  // an OSS/R2 presign even when the editor is connected to the hosted platform.
+  return { url: `/upload?localOnly=1&name=${encodeURIComponent(file.name)}` };
 }
 
 /** Stream File to the same-origin proxy or a presigned object URL with progress. */
@@ -140,29 +94,6 @@ function responseError(value: unknown): string | undefined {
     : undefined;
 }
 
-function putPresigned(file: File, uploadUrl: string, onProgress?: UploadProgress): Promise<void> {
-  const { promise, resolve, reject } = deferred<void>();
-  const xhr = new XMLHttpRequest();
-  xhr.open('PUT', uploadUrl);
-  xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-  xhr.upload.onprogress = (event) => {
-    if (!onProgress || !event.lengthComputable || event.total <= 0) return;
-    onProgress(Math.min(1, event.loaded / event.total));
-  };
-  xhr.onload = () => {
-    if (xhr.status < 200 || xhr.status >= 300) {
-      reject(new Error(t('上传失败 ({status})', { status: xhr.status })));
-      return;
-    }
-    onProgress?.(1);
-    resolve();
-  };
-  xhr.onerror = () => reject(new Error(t('上传失败 ({status})', { status: 0 })));
-  xhr.onabort = () => reject(new Error(t('上传已取消')));
-  xhr.send(file);
-  return promise;
-}
-
 function sleep(ms: number): Promise<void> {
   const { promise, resolve } = deferred<void>();
   setTimeout(resolve, ms);
@@ -204,6 +135,7 @@ async function startMultipart(file: File): Promise<MultipartSession> {
       name: file.name,
       size: file.size,
       contentType: file.type || 'application/octet-stream',
+      localOnly: true,
     }),
   });
   const info: unknown = await response.json().catch(() => null);
@@ -296,85 +228,10 @@ export async function retryExpiredMultipartSession<T>(attempt: () => Promise<T>)
   }
 }
 
-
-async function sha256Hex(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-interface OssPresignSlot {
-  ossUpload: true;
-  uploadUrl: string;
-  name: string;
-  path: string;
-  objectKey: string;
-  sourceUrl: string;
-  contentType: string;
-}
-
-/**
- * Platform mode: upload straight to the tenant's OSS material library. The browser PUTs the
- * bytes to a signed OSS URL (never touching the editor server's disk), then hydrate registers
- * the object as a tenant material and returns the stable /media/uploads/<name> handle.
- */
-async function uploadFileViaPlatformOss(
-  file: File,
-  onProgress?: UploadProgress,
-): Promise<UploadedMediaLocation | null> {
-  const contentType = file.type || 'application/octet-stream';
-  const presignResponse = await fetch('/upload/presign', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: file.name, contentType, size: file.size }),
-  });
-  if (!presignResponse.ok) {
-    const info = safeJson(await presignResponse.text());
-    if (presignResponse.status === 413) throw new Error(responseError(info) ?? t('文件过大，无法上传'));
-    // A backend that predates OSS uploads may reject the extra field or be unavailable here;
-    // return null so the caller falls back to the standard upload path rather than failing.
-    return null;
-  }
-  const slot = safeJson(await presignResponse.text()) as Partial<OssPresignSlot> | null;
-  if (!slot?.ossUpload || !slot.uploadUrl || !slot.name || !slot.objectKey || !slot.sourceUrl || !slot.path) {
-    // Backend does not (yet) route uploads to OSS — fall back to the standard path.
-    return null;
-  }
-  await putPresigned(file, slot.uploadUrl, onProgress);
-  const contentHash = await sha256Hex(file);
-  const hydrateResponse = await fetch('/upload/hydrate', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      name: slot.name, objectKey: slot.objectKey, sourceUrl: slot.sourceUrl,
-      size: file.size, contentType, contentHash,
-    }),
-  });
-  const info = safeJson(await hydrateResponse.text());
-  if (!hydrateResponse.ok) {
-    throw new Error(responseError(info) ?? t('上传失败 ({status})', { status: hydrateResponse.status }));
-  }
-  const location = uploadedMediaLocation(info);
-  if (!location) throw new Error(t('上传失败 ({status})', { status: hydrateResponse.status }));
-  onProgress?.(1);
-  return location;
-}
-
-/** The desktop app keeps media local (embedded server on the user's machine), so it must not
- * route uploads to the tenant OSS library the way the hosted web build does. */
-function isDesktopRuntime(): boolean {
-  return typeof window !== 'undefined'
-    && typeof (window as unknown as { openChatCutDesktop?: unknown }).openChatCutDesktop !== 'undefined';
-}
-
 export async function uploadFile(
   file: File,
   onProgress?: UploadProgress,
 ): Promise<UploadedMediaLocation> {
-  if (platformManagedClient() && !isDesktopRuntime()) {
-    const viaOss = await uploadFileViaPlatformOss(file, onProgress);
-    if (viaOss) return viaOss;
-    // Backend has not enabled OSS uploads yet — fall through to the standard path.
-  }
   if (file.size < MULTIPART_THRESHOLD) return uploadFileSimple(file, onProgress);
   try {
     return await retryExpiredMultipartSession(

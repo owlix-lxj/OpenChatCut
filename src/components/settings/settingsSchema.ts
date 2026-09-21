@@ -38,7 +38,6 @@ import {
   PLATFORM_DEFAULT_LLM_CONFIG,
   PLATFORM_IMAGE_VENDOR,
   PLATFORM_LLM_PROVIDERS,
-  PLATFORM_VIDEO_VENDOR,
   PLATFORM_VOICE_PROVIDERS,
 } from '../../../shared/platform-config';
 
@@ -300,11 +299,16 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
   },
 ];
 
-const PLATFORM_MANAGED_GROUPS = new Set(['llm', 'image', 'voice', 'video']);
+const PLATFORM_CURATED_GROUPS = new Set(['llm', 'image', 'voice', 'video', 'transcription']);
+const PLATFORM_MANAGED_PAGES = new Set([
+  'llm/openai',
+  'llm/deepseek',
+  'image/openai',
+]);
 
 /** Whether a settings page contains a provider configuration owned by the platform. */
 export function isPlatformManagedPage(pageKey: string): boolean {
-  return ['llm/', 'image/', 'voice/', 'video/'].some((prefix) => pageKey.startsWith(prefix));
+  return PLATFORM_MANAGED_PAGES.has(pageKey);
 }
 
 function platformVendorAllowed(groupKey: string, pageKey: string): boolean {
@@ -313,7 +317,8 @@ function platformVendorAllowed(groupKey: string, pageKey: string): boolean {
   }
   if (groupKey === 'image') return pageKey === 'image/openai';
   if (groupKey === 'voice') return PLATFORM_VOICE_PROVIDERS.some((provider) => pageKey === `voice/${provider}`);
-  if (groupKey === 'video') return pageKey === 'video/seedance';
+  if (groupKey === 'video') return true;
+  if (groupKey === 'transcription') return pageKey !== 'transcription/qwen';
   return true;
 }
 
@@ -347,14 +352,16 @@ function platformizeVendorPage(page: SettingsVendorPage): SettingsVendorPage {
 }
 
 function platformizeRoute(groupKey: string, field: SettingsField | undefined): SettingsField | undefined {
-  if (!field || !PLATFORM_MANAGED_GROUPS.has(groupKey) || !field.options) return field;
+  if (!field || !PLATFORM_CURATED_GROUPS.has(groupKey) || !field.options) return field;
   const allowed = groupKey === 'llm'
     ? new Set<string>(PLATFORM_LLM_PROVIDERS)
     : groupKey === 'image'
       ? new Set<string>([PLATFORM_IMAGE_VENDOR])
       : groupKey === 'voice'
         ? new Set<string>(PLATFORM_VOICE_PROVIDERS)
-        : new Set<string>([PLATFORM_VIDEO_VENDOR]);
+        : groupKey === 'transcription'
+          ? new Set<string>(field.options.filter((option) => option.value !== 'qwen').map((option) => option.value))
+          : new Set<string>(field.options.map((option) => option.value));
   const options = field.options.filter((option) => option.value === '' || allowed.has(option.value));
   if (groupKey === 'llm') {
     return {
@@ -369,7 +376,7 @@ function platformizeRoute(groupKey: string, field: SettingsField | undefined): S
 
 /** Filter the provider list and default-provider route for platform-managed UI. */
 export function platformizeSettingsGroup(group: SettingsGroup): SettingsGroup {
-  if (!PLATFORM_MANAGED_GROUPS.has(group.key)) return group;
+  if (!PLATFORM_CURATED_GROUPS.has(group.key)) return group;
   return {
     ...group,
     route: platformizeRoute(group.key, group.route),
@@ -377,6 +384,22 @@ export function platformizeSettingsGroup(group: SettingsGroup): SettingsGroup {
       .filter((page) => platformVendorAllowed(group.key, page.key))
       .map(platformizeVendorPage),
   };
+}
+
+/** Platform users consume Agent and image generation as built-in services, so
+ * those configuration menus are intentionally absent. User-managed media
+ * providers remain visible and editable. */
+export function platformizeSettingsCategories(
+  categories: readonly SettingsCategory[] = SETTINGS_CATEGORIES,
+): SettingsCategory[] {
+  return categories
+    .map((category) => ({
+      ...category,
+      groups: category.groups
+        .filter((group) => group.key !== 'llm' && group.key !== 'image')
+        .map(platformizeSettingsGroup),
+    }))
+    .filter((category) => category.groups.length > 0);
 }
 
 /** Temporary changes: field name in map = temporary storage; '' = clear explicitly (model fields will return to default).*/
@@ -418,6 +441,7 @@ export function vendorConfigured(
   codexStatus?: CodexAgentStatus | null,
   copilotStatus?: CopilotAgentStatus | null,
 ): boolean {
+  if (status?.platformManaged && isPlatformManagedPage(page.key)) return true;
   if (page.connection === 'codex') {
     return Boolean(codexStatus?.installed && codexStatus.account?.type === 'chatgpt');
   }

@@ -391,6 +391,33 @@ try {
   await assertMissing(join(directory, 'streamed-part.bin'), 'actual over-slot bytes must not become completable');
   await abortMultipart(origin, streamedPartId);
 
+  const localOnlySingle = await jsonResponse(await editorFetch(
+    `${origin}/upload?localOnly=1&name=local-only.bin&assetId=local-only`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: 'local',
+    },
+  ));
+  assert.equal(localOnlySingle.cloud, 'off', 'media-pool upload must skip R2 even when configured');
+  assert.equal(await readFile(join(directory, 'local-only.bin'), 'utf8'), 'local');
+
+  const localMultipartSession = await multipartInit(origin, {
+    name: 'local-multipart.bin', assetId: 'local-multipart', size: CAP, localOnly: true,
+  });
+  assert.equal(localMultipartSession.response.status, 200, JSON.stringify(localMultipartSession.json));
+  const localMultipartId = String(localMultipartSession.json.uploadId);
+  const localPart = await editorFetch(`${origin}/upload/multipart/part?uploadId=${localMultipartId}&part=1`, {
+    method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: Buffer.alloc(CAP, 9),
+  });
+  assert.equal(localPart.status, 200, await localPart.text());
+  const localComplete = await jsonResponse(await editorFetch(`${origin}/upload/multipart/complete`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ uploadId: localMultipartId }),
+  }));
+  assert.equal(localComplete.cloud, 'off', 'local-only multipart completion must skip R2');
+  assert.equal((await stat(join(directory, 'local-multipart.bin'))).size, CAP);
+
   seedKeystore({ R2_ENABLED: '0' });
   const exactBytes = Buffer.alloc(CAP, 7);
   const expectedContentHash = createHash('sha256').update(exactBytes).digest('hex');

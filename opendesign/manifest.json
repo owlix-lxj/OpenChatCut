@@ -1,0 +1,33 @@
+{
+  "generated": "2026-09-20T03:16:13.169Z",
+  "sections": [
+    {
+      "id": "mockups",
+      "label": "Mockups",
+      "groups": [
+        {
+          "slug": "pelican-ride",
+          "files": [
+            {
+              "label": "pelican-ride-cyberpunk.html",
+              "path": "mockups/pelican-ride/pelican-ride-cyberpunk.html"
+            },
+            {
+              "label": "pelican-ride-daylight.html",
+              "path": "mockups/pelican-ride/pelican-ride-daylight.html"
+            },
+            {
+              "label": "pelican-ride.html",
+              "path": "mockups/pelican-ride/pelican-ride.html"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "design-systems",
+      "label": "Design Systems",
+      "groups": []
+    }
+  ]
+}

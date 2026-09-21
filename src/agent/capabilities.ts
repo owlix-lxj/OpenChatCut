@@ -6,7 +6,6 @@
 import {
   PLATFORM_DEFAULT_ROUTES,
   PLATFORM_IMAGE_VENDOR,
-  PLATFORM_VIDEO_VENDOR,
   PLATFORM_VOICE_PROVIDERS,
 } from '../../shared/platform-config';
 
@@ -158,15 +157,15 @@ function providerSuffix(cap: CapabilityKey, mode: ApprovalMode): string {
         : cap === 'voice'
           ? (PLATFORM_VOICE_PROVIDERS as readonly string[]).includes(r.arg)
           : cap === 'video'
-            ? r.arg === PLATFORM_VIDEO_VENDOR
-            : cap === 'transcription' ? false : true;
+            ? true
+          : cap === 'transcription' ? r.arg !== 'qwen' : true;
       if (!allowed) return false;
     }
     return r.need.some((group) => group.every(has));
   });
   if (on.length === 0) return '';
   const prefKey = PREFERRED_KEY[cap];
-  const platformDefault = platformManaged() && (cap === 'image' || cap === 'voice' || cap === 'video')
+  const platformDefault = platformManaged() && (cap === 'image' || cap === 'voice' || cap === 'video' || cap === 'transcription')
     ? PLATFORM_DEFAULT_ROUTES[cap]
     : '';
   const savedPref = prefKey ? (liveModels?.[prefKey] ?? platformDefault).trim() : '';

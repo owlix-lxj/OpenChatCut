@@ -162,6 +162,51 @@ export const CREATIVE_SKILL_METADATA: CreativeSkillMetadata[] = [
     ]
   },
   {
+    id: '11111111-1240-4000-8000-000000000016',
+    slug: 'heygen-avatar',
+    name: 'HeyGen Avatar',
+    nameZh: '定制数字人形象',
+    summary: '创建并管理用户自己的定制数字人形象，作为课程视频的专属主讲人。',
+    scenarios: [
+      'heygen-avatar',
+      'custom-avatar',
+      'digital-twin',
+      'photo-avatar',
+      '定制数字人',
+      '数字人形象库'
+    ]
+  },
+  {
+    id: '11111111-1240-4000-8000-000000000017',
+    slug: 'heygen-video',
+    name: 'HeyGen Course Video',
+    nameZh: '数字人智能制课',
+    summary: '用自定义数字人、可试听课程配音和分段讲稿生成课程视频，并导入本地素材池。',
+    scenarios: [
+      'heygen-video',
+      'course-video',
+      'avatar-video',
+      'digital-human-course',
+      '数字人制课',
+      '智能制课'
+    ]
+  },
+  {
+    id: '11111111-1240-4000-8000-000000000018',
+    slug: 'heygen-translate',
+    name: 'HeyGen Video Translation',
+    nameZh: '数字人视频翻译',
+    summary: '把已有视频翻译为多语言配音与口型同步版本，并分别导回本地素材池。',
+    scenarios: [
+      'heygen-translate',
+      'video-translation',
+      'video-localization',
+      'lip-sync-translation',
+      '视频翻译',
+      '多语言课程'
+    ]
+  },
+  {
     id: '11111111-1240-4000-8000-000000000013',
     slug: 'skill-creator',
     name: 'Skill Creator',

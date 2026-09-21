@@ -1,4 +1,6 @@
 import { getKey } from '../keystore.ts';
+import { DEFAULT_PLATFORM_API_BASE_URL } from '../../shared/platform-config.ts';
+import { activePlatformSessionToken, platformManaged } from '../platform-session.ts';
 import type { TranscriptionOptions } from './transcription-types.ts';
 import type { AiVoiceOptions } from './voice-types.ts';
 
@@ -11,6 +13,10 @@ export function versionedApiBaseUrl(baseUrl: string, version: string): string {
  * OpenAI-compatible Qwen URL saved by the Agent settings page. */
 export function dashScopeServiceUrl(baseUrl: string, servicePath: string): string {
   const raw = (baseUrl || 'https://dashscope.aliyuncs.com').trim().replace(/\/+$/, '');
+  const path = servicePath.startsWith('/') ? servicePath : `/${servicePath}`;
+  // Platform mode points at the authenticated API Gateway prefix instead of
+  // DashScope's public root. Preserve that prefix verbatim.
+  if (/\/qwen-audio$/i.test(raw)) return `${raw}${path}`;
   let root = raw;
   try {
     const parsed = new URL(raw);
@@ -25,7 +31,6 @@ export function dashScopeServiceUrl(baseUrl: string, servicePath: string): strin
       .replace(/\/v\d+(?:beta)?$/i, '')
       .replace(/\/+$/, '');
   }
-  const path = servicePath.startsWith('/') ? servicePath : `/${servicePath}`;
   if (/\/api\/v\d+(?:beta)?$/i.test(root)) return `${root}${path}`;
   return `${root}/api/v1${path}`;
 }
@@ -64,9 +69,16 @@ export function transcriptionOptions(): TranscriptionOptions {
     get cartesiaApiKey() { return getKey('CARTESIA_API_KEY'); },
     get cartesiaModel() { return getKey('CARTESIA_TRANSCRIPTION_MODEL') || 'ink-whisper'; },
     get qwenBaseUrl() {
+      if (platformManaged()) {
+        const base = (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL || DEFAULT_PLATFORM_API_BASE_URL)
+          .trim().replace(/\/+$/, '');
+        return `${base}/v1/video-editor/qwen-audio`;
+      }
       return getKey('QWEN_AUDIO_BASE_URL') || getKey('LLM_QWEN_BASE_URL') || 'https://dashscope.aliyuncs.com';
     },
-    get qwenApiKey() { return getKey('LLM_QWEN_API_KEY'); },
+    get qwenApiKey() {
+      return platformManaged() ? activePlatformSessionToken() : getKey('LLM_QWEN_API_KEY');
+    },
     get qwenModel() { return getKey('QWEN_ASR_MODEL') || 'qwen-audio-3.0-asr-flash'; },
     get language() { return getKey('TRANSCRIPTION_LANGUAGE') || 'zh'; },
     get diarization() { return getKey('TRANSCRIPTION_DIARIZATION') !== '0'; },

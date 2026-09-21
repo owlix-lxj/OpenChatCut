@@ -32,9 +32,11 @@ import type { ZoomEffect } from '../editor/types';
 import { Icon } from '../components/icons';
 import { parseSrt } from '../captions/srt';
 import { DigitalHumanPanel } from './DigitalHumanPanel';
+import type { CourseGenerationOptions } from './digitalHumanCourseDuration';
 import type { DigitalHumanInput } from '../editor/digitalHumanFlow';
 import { PlatformMaterialPanel } from './PlatformMaterialPanel';
-import { platformManagedClient } from '../platform/platformIntegration';
+import { platformManagedClient, type PlatformDigitalHuman } from '../platform/platformIntegration';
+import { VideoCopyRewritePanel } from './VideoCopyRewritePanel';
 
 // Two built-in LUTs implemented with published camera-log transfer functions.
 // They apply through the same pipeline as other effects.
@@ -58,7 +60,7 @@ interface LibraryPanelProps {
   templates: Tpl[];
   onAddTemplate: (tpl: Tpl) => void;
   onAddAudio: (asset: AudioAsset) => void;
-  onGenerateCourse?: (assets: MediaAsset[], action: 'script' | 'video') => Promise<void> | void;
+  onGenerateCourse?: (assets: MediaAsset[], action: 'script' | 'video', digitalHuman?: PlatformDigitalHuman, options?: CourseGenerationOptions) => Promise<void> | void;
   /** Legacy direct digital-human callback retained for workspace compatibility. */
   onCreateDigitalHuman?: (input: DigitalHumanInput, onStage: (stage: 'voice' | 'avatar') => void) => Promise<string>;
   playerRef: RefObject<PlayerRef | null>;
@@ -126,7 +128,7 @@ interface LibraryPanelProps {
   onApplyZoom: (zoom: ZoomEffect) => void;
 }
 
-const BASE_MAIN_TABS = ['我的素材', '智能制课', '序列', '资源库', '文字稿', '字幕', '技能'] as const;
+const BASE_MAIN_TABS = ['我的素材', 'AI 改写', '智能制课', '序列', '资源库', '文字稿', '字幕', '技能'] as const;
 type MainTab = (typeof BASE_MAIN_TABS)[number] | '业务素材';
 const MAIN_TABS: readonly MainTab[] = platformManagedClient()
   ? ['我的素材', '业务素材', ...BASE_MAIN_TABS.slice(1)]
@@ -211,8 +213,11 @@ export function LibraryPanel({ semanticScopeId, digitalHumanOpenNonce = 0, templ
       </div>
       {extensionOpen ? (
         <ExtensionCenter onClose={() => setExtensionOpen(false)} />
+      ) : mainTab === 'AI 改写' ? (
+        <VideoCopyRewritePanel />
       ) : mainTab === '智能制课' ? (
-        <DigitalHumanPanel assets={assets} onImportMedia={onImportMedia} onGenerateCourse={onGenerateCourse ?? ((courseAssets) => onUseMediaAI(courseAssets))} />
+        <DigitalHumanPanel assets={assets} fps={fps} onImportMedia={onImportMedia} onAddGeneratedMedia={onIngestDirectoryAsset}
+          onAddGeneratedMediaToTimeline={onAddMediaAssetsToTimeline} onGenerateCourse={onGenerateCourse ?? ((courseAssets) => onUseMediaAI(courseAssets))} />
       ) : mainTab === '业务素材' ? (
         <PlatformMaterialPanel fps={fps} onImport={onIngestDirectoryAsset} />
       ) : isCaptions ? (

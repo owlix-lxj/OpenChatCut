@@ -40,6 +40,8 @@ export interface ProxyRoute {
   errorMessage?: (status: number, req: IncomingMessage) => string;
   /** Buffer small JSON requests so strict upstream gateways do not reject chunked bodies. */
   bufferRequestBody?: boolean;
+  /** Send trusted platform/control-plane traffic directly instead of through a user VPN proxy. */
+  bypassOutboundProxy?: (req: IncomingMessage) => boolean;
 }
 
 export function proxyMiddleware(route: ProxyRoute): Middleware {
@@ -81,7 +83,9 @@ export function proxyMiddleware(route: ProxyRoute): Middleware {
     }
     const query = search.size > 0 ? `?${search.toString()}` : '';
     const doRequest = target.protocol === 'http:' ? httpRequest : httpsRequest;
-    const agent = target.protocol === 'https:' ? outboundProxyAgent() : null;
+    const agent = target.protocol === 'https:' && !route.bypassOutboundProxy?.(req)
+      ? outboundProxyAgent()
+      : null;
     const upstream = doRequest({
       host: target.hostname,
       port: target.port || (target.protocol === 'http:' ? 80 : 443),

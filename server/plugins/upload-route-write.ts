@@ -51,6 +51,7 @@ async function handleUploadWrite(
   let createdRollbackToken: string | undefined;
   try {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    const localOnly = url.searchParams.get('localOnly') === '1';
     const original = url.searchParams.get('name') ?? 'file';
     const assetId = (url.searchParams.get('assetId') ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
     const ifAbsent = url.searchParams.get('ifAbsent') === '1';
@@ -217,7 +218,9 @@ async function handleUploadWrite(
       await rename(partPath!, finalPath!);
       partPath = undefined;
       await clearUploadOwner(directory, name);
-      const cloud = await mirrorUpload(name, finalPath!, req.headers['content-type'] || undefined, logger, 'upload→R2');
+      const cloud = localOnly
+        ? 'off'
+        : await mirrorUpload(name, finalPath!, req.headers['content-type'] || undefined, logger, 'upload→R2');
       const fileKey = uploadObjectKey(name);
       const receipt = handoff
         ? mintUploadReceipt(handoff, { path, fileKey, bytes, contentHash })

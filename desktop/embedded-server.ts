@@ -18,6 +18,8 @@ import { listenWithAffinity } from './embedded-port.ts';
 import { runtimeProfile } from '../server/runtime-profile.ts';
 import { distStaticMiddleware, uploadsMiddleware } from './static-files.ts';
 import { registerProductAssetRoot } from '../server/product-assets.ts';
+import { configureDesktopPlatformSessionProvider } from '../server/platform-session.ts';
+import { migrateDesktopScopedMedia } from '../server/media-dir.ts';
 
 export interface EmbeddedServer {
   server: Server;
@@ -71,10 +73,26 @@ export function mountAssemblyAiProxy(
   app.use('/assemblyai', proxyMiddleware(route));
 }
 
-export async function startEmbeddedServer(distDir: string): Promise<EmbeddedServer> {
+export async function startEmbeddedServer(
+  distDir: string,
+  options: {
+    platformSessionToken?: () => string | null;
+    clearPlatformSession?: () => void | Promise<void>;
+  } = {},
+): Promise<EmbeddedServer> {
+  if (options.platformSessionToken) {
+    configureDesktopPlatformSessionProvider(
+      options.platformSessionToken,
+      options.clearPlatformSession,
+    );
+  }
   // Product files (fonts, voice samples, LUTs, …) live in resources/dist when packaged.
   registerProductAssetRoot(distDir);
   await seedFromEnvLocal();
+  const migrated = await migrateDesktopScopedMedia();
+  if (migrated.linked || migrated.copied) {
+    console.log(`[desktop] recovered ${migrated.linked + migrated.copied} legacy scoped media files`);
+  }
 
   const app = createMiniConnect((err) => {
     console.error('[embedded-server]', err instanceof Error ? err.message : err);
@@ -104,7 +122,7 @@ export async function startEmbeddedServer(distDir: string): Promise<EmbeddedServ
 
   // Static cover at the end: uploading assets at runtime takes precedence over dist's build-stage copy
   app.use('/media/uploads', uploadsMiddleware());
-  app.use(distStaticMiddleware(distDir));
+  app.use(distStaticMiddleware(distDir, process.env.OPENCHATCUT_BASE));
 
   // Port policy: canonical 5199 first (the documented external-MCP address),
   // then the fallback used last time it was busy, then a fresh random port that

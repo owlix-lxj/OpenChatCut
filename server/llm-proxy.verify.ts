@@ -211,11 +211,29 @@ try {
 
 {
   const { seedKeystore } = await import('./keystore.ts');
-  const { llmErrorMessage } = await import('./plugins/llm-proxy.ts');
+  const { llmErrorMessage, llmHeaders, llmTarget } = await import('./plugins/llm-proxy.ts');
+  const { configureDesktopPlatformSessionProvider } = await import('./platform-session.ts');
   seedKeystore({ OPENCHATCUT_PLATFORM_MODE: 'platform' });
+  process.env.OPENCHATCUT_PLATFORM_API_BASE_URL = 'https://gateway.example.test/api/';
+  const claims = Buffer.from(JSON.stringify({
+    type: 'session', sub: 'user-a', tenant_id: 'tenant-a', jti: 'session-a',
+    iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600,
+  })).toString('base64url');
+  const desktopToken = `${claims}.gateway-signature`;
+  configureDesktopPlatformSessionProvider(() => desktopToken);
   const deepseekRequest = {
     headers: { 'x-openchatcut-provider': 'deepseek' },
   } as never;
+  assert.equal(
+    llmTarget(deepseekRequest),
+    'https://gateway.example.test/api/v1/video-editor/llm/deepseek',
+    'platform mode always targets the authenticated cloud gateway',
+  );
+  assert.deepEqual(
+    llmHeaders(deepseekRequest),
+    { authorization: `Bearer ${desktopToken}` },
+    'platform mode forwards only the scoped platform session, never a provider key',
+  );
   assert.match(
     llmErrorMessage(405, deepseekRequest),
     /平台服务请求失败.*平台管理员/,

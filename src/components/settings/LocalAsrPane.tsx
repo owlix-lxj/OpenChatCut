@@ -1,6 +1,6 @@
 // Settings → 转写 → 本地模型：模型选择 + 按需下载管理。
-// Models are NOT bundled — users pick and download them on demand through the
-// local hf-proxy (multi-source accelerated download into the disk cache).
+// Full-precision Whisper large-v3 is bundled with desktop AI-cut. Other models
+// remain optional downloads through the local hf-proxy.
 // Whisper is OpenAI's open-source model, so the official OpenAI mark is used.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../../theme';
@@ -226,7 +226,7 @@ export function LocalAsrPane({ fields, ctx }: { fields: readonly SettingsField[]
         </span>
       </label>
       <div style={{ fontSize: 11.5, color: theme.textDim }}>
-        {t('模型按需下载到本机，不随应用打包。首次使用或下载模型时自动加速下载。')}
+        {t('桌面版已内置完整精度 Whisper Large v3，无需下载；其他模型可按需安装。')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
         {loadError && <div style={{ fontSize: 11.5, color: theme.danger }}>{t('无法读取模型列表：{err}', { err: loadError })}</div>}

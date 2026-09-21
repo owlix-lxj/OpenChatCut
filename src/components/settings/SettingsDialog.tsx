@@ -33,9 +33,9 @@ import {
   runUpstreamUpdateCommand,
 } from '../../ui/upstreamUpdateAction';
 import {
-  SETTINGS_CATEGORIES, buildPatch, categoryGroupStats, findGroup, groupConfigured,
+  SETTINGS_CATEGORIES, buildPatch, categoryGroupStats, groupConfigured,
   modelValue, omitKey, savedMessage, vendorConfigured,
-  isPlatformManagedPage, platformizeSettingsGroup,
+  isPlatformManagedPage, platformizeSettingsCategories,
   type KeyStatusResponse, type SettingsCategory, type SettingsField, type SettingsGroup,
   type SettingsVendorPage, type StagedValues as Values,
 } from './settingsSchema';
@@ -98,7 +98,8 @@ function syncTranscriptionPreferences(models: Record<string, string>): void {
 /** Keep the runtime ASR model tier in sync with the saved setting ('' → auto). */
 function syncLocalAsrModel(saved: string | undefined): void {
   try {
-    if (saved === 'tiny' || saved === 'base' || saved === 'small' || saved === 'medium' || saved === '') {
+    if (saved === 'tiny' || saved === 'base' || saved === 'small' || saved === 'medium'
+      || saved === 'large-v3-turbo' || saved === '') {
       localStorage.setItem('cc.asrModel', saved ?? '');
     }
   } catch {
@@ -167,17 +168,22 @@ function useHover(): [boolean, { onMouseEnter: () => void; onMouseLeave: () => v
 }
 
 /** The left tree capability is selected + the middle column provider is selected; when changing capabilities, the middle column is reset to the first provider with the capability. */
-function useTreeSelection(initialVendor?: string): {
+function groupFromCategories(categories: readonly SettingsCategory[], key: string): SettingsGroup {
+  return categories.flatMap((category) => category.groups).find((group) => group.key === key)
+    ?? categories[0].groups[0];
+}
+
+function useTreeSelection(initialVendor: string | undefined, categories: readonly SettingsCategory[]): {
   group: SettingsGroup; page: SettingsVendorPage;
   selectGroup: (key: string) => void; selectVendor: (key: string) => void;
 } {
-  const seeded = seedSelection(initialVendor);
+  const seeded = seedSelection(initialVendor, categories);
   const [groupKey, setGroupKey] = useState<string>(seeded.group.key);
   const [vendorKey, setVendorKey] = useState<string>(seeded.vendor.key);
-  const group = findGroup(groupKey);
+  const group = groupFromCategories(categories, groupKey);
   const page = group.vendors.find((v) => v.key === vendorKey) ?? group.vendors[0];
   const selectGroup = (key: string): void => {
-    const nextGroup = findGroup(key);
+    const nextGroup = groupFromCategories(categories, key);
     setGroupKey(key);
     setVendorKey(nextGroup.vendors[0].key);
   };
@@ -185,14 +191,17 @@ function useTreeSelection(initialVendor?: string): {
 }
 
 /** Open on a specific vendor page when the caller routed here (e.g. the chat's missing-model-pack button). */
-function seedSelection(initialVendor?: string): { group: SettingsGroup; vendor: SettingsVendorPage } {
-  for (const category of SETTINGS_CATEGORIES) {
+function seedSelection(
+  initialVendor: string | undefined,
+  categories: readonly SettingsCategory[],
+): { group: SettingsGroup; vendor: SettingsVendorPage } {
+  for (const category of categories) {
     for (const group of category.groups) {
       const vendor = group.vendors.find((v) => v.key === initialVendor);
       if (vendor) return { group, vendor };
     }
   }
-  const first = SETTINGS_CATEGORIES[0].groups[0];
+  const first = categories[0].groups[0];
   return { group: first, vendor: first.vendors[0] };
 }
 
@@ -260,10 +269,10 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
   );
   const { status, setStatus, loadError } = useKeyStatus();
   const [values, setValues] = useState<Values>({});
-  const { group, page, selectGroup, selectVendor } = useTreeSelection(initialVendor);
-  const displayGroup = status?.platformManaged ? platformizeSettingsGroup(group) : group;
-  const displayPage = displayGroup.vendors.find((vendor) => vendor.key === page.key)
-    ?? displayGroup.vendors[0];
+  const categories = status?.platformManaged ? platformizeSettingsCategories() : SETTINGS_CATEGORIES;
+  const { group, page, selectGroup, selectVendor } = useTreeSelection(initialVendor, categories);
+  const displayGroup = group;
+  const displayPage = page;
   const [reveal, setReveal] = useState(false);
   const refreshStatus = async (): Promise<void> => {
     try {
@@ -325,7 +334,7 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
           </div>
         </header>
         <div style={bodyRow}>
-          <CapabilityTree status={status} codexStatus={codexStatus} copilotStatus={copilotStatus}
+          <CapabilityTree categories={categories} status={status} codexStatus={codexStatus} copilotStatus={copilotStatus}
             activeGroup={group.key} onSelect={selectGroup} />
           <VendorList group={displayGroup} activeVendor={displayPage.key} onSelectVendor={selectVendor} ctx={ctx} />
           <VendorPane page={displayPage} hint={displayGroup.hint} ctx={ctx} />
@@ -340,7 +349,8 @@ export function SettingsDialog({ onClose, initialVendor }: { onClose: () => void
 
 // ── Left column (categories can be folded → capabilities can be selected) ──────────────────────────────────────
 
-function CapabilityTree({ status, codexStatus, copilotStatus, activeGroup, onSelect }: {
+function CapabilityTree({ categories, status, codexStatus, copilotStatus, activeGroup, onSelect }: {
+  categories: readonly SettingsCategory[];
   status: KeyStatusResponse | null; codexStatus: CodexAgentStatus | null;
   copilotStatus: CopilotAgentStatus | null;
   activeGroup: string; onSelect: (key: string) => void;
@@ -356,7 +366,7 @@ function CapabilityTree({ status, codexStatus, copilotStatus, activeGroup, onSel
   return (
     <nav style={sidebar}>
       <div style={treeScroll}>
-        {SETTINGS_CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <TreeCategory key={cat.key} category={cat} status={status} codexStatus={codexStatus}
             copilotStatus={copilotStatus}
             open={!collapsed.has(cat.key)} activeGroup={activeGroup}
@@ -365,7 +375,7 @@ function CapabilityTree({ status, codexStatus, copilotStatus, activeGroup, onSel
       </div>
       <p style={sidebarNote}>
         {status?.platformManaged
-          ? <><b>{t('平台统一管理供应商配置。')}</b>{t(' 用户无需填写 API Key，密钥只在服务端使用。')}</>
+          ? <><b>{t('平台内置模型由云端管理。')}</b>{t(' 豆包、MiniMax 与转写服务可在此填写自己的 API 配置。')}</>
           : <>{t('密钥仅存本机')} <code style={code}>.env.local</code>{t('（已 gitignore），经服务端注入，')}<b>{t('不进浏览器。')}</b></>}
       </p>
     </nav>

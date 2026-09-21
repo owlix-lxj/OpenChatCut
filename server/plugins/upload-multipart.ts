@@ -230,6 +230,7 @@ export function uploadMultipartPlugin(): Plugin {
             size?: number;
             assetId?: string;
             contentType?: string;
+            localOnly?: boolean;
             partSize?: number;
           };
           const name = String(body.name ?? 'file');
@@ -265,6 +266,7 @@ export function uploadMultipartPlugin(): Plugin {
             uploadId, name, ext, size, partSize, partCount,
             assetId: assetIdRaw || undefined,
             contentType: typeof body.contentType === 'string' ? body.contentType : undefined,
+            localOnly: body.localOnly === true,
             createdAt: timestamp, updatedAt: timestamp,
           };
           pendingBytes += size; pendingSessions += 1;
@@ -427,7 +429,7 @@ export function uploadMultipartPlugin(): Plugin {
           }
           await rename(partOut, finalPath);
           let cloud: 'ok' | 'off' | 'failed' = 'off';
-          if (r2Config()) {
+          if (!meta.localOnly && r2Config()) {
             try {
               await putUploadFile(fname, finalPath, meta.contentType);
               cloud = 'ok';

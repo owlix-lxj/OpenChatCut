@@ -52,6 +52,8 @@ import { agentRunsPlugin } from "../agent-runs/routes.ts";
 import { resourcePreviewPlugin } from "./resource-preview.ts";
 import { getKey, isPlatformManaged } from "../keystore.ts";
 import { PLATFORM_DEFAULT_LLM_CONFIG } from '../../shared/platform-config.ts';
+import { DEFAULT_PLATFORM_API_BASE_URL } from '../../shared/platform-config.ts';
+import { activePlatformSessionToken, platformManaged } from '../platform-session.ts';
 
 import { installSystemProxy } from '../net.ts';
 import { requestShapeGatePlugin } from './request-shape-gate';
@@ -219,10 +221,15 @@ export function serverPlugins(options: { projectStoreHttp?: boolean } = {}): Plu
         return getKey("SPEECHIFY_TTS_MODEL") || "simba-multilingual";
       },
       get qwenBaseUrl() {
+        if (platformManaged()) {
+          const base = (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL || DEFAULT_PLATFORM_API_BASE_URL)
+            .trim().replace(/\/+$/, '');
+          return `${base}/v1/video-editor/qwen-audio`;
+        }
         return getKey("QWEN_AUDIO_BASE_URL") || getKey("LLM_QWEN_BASE_URL") || "https://dashscope.aliyuncs.com";
       },
       get qwenApiKey() {
-        return getKey("LLM_QWEN_API_KEY");
+        return platformManaged() ? activePlatformSessionToken() : getKey("LLM_QWEN_API_KEY");
       },
       get qwenModel() {
         return getKey("QWEN_TTS_MODEL") || "qwen-audio-3.0-tts-plus";

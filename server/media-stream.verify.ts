@@ -7,7 +7,7 @@ import { createServer, get, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMiniConnect } from '../desktop/mini-connect.ts';
-import { distStaticMiddleware } from '../desktop/static-files.ts';
+import { distStaticMiddleware, staticBaseFromIndex, stripStaticBase } from '../desktop/static-files.ts';
 import { serveDiskFile } from './media-dir.ts';
 
 const root = await mkdtemp(join(tmpdir(), 'occ-media-stream-check-'));
@@ -44,6 +44,14 @@ try {
   await writeFile(join(root, 'empty.mp4'), '');
   await writeFile(join(root, 'art.svg'), '<svg/>');
   await writeFile(join(root, 'index.html'), '<html>fixture</html>');
+  assert.equal(stripStaticBase('/openchatcut/assets/app.js', '/openchatcut/'), '/assets/app.js');
+  assert.equal(stripStaticBase('/openchatcut', '/openchatcut/'), '/');
+  assert.equal(stripStaticBase('/assets/app.js', '/openchatcut/'), '/assets/app.js');
+  const inferredRoot = join(root, 'prefixed-dist');
+  await mkdir(join(inferredRoot, 'assets'), { recursive: true });
+  await writeFile(join(inferredRoot, 'index.html'), '<script src="/openchatcut/assets/app.js"></script>');
+  await writeFile(join(inferredRoot, 'assets', 'app.js'), content);
+  assert.equal(staticBaseFromIndex(inferredRoot), '/openchatcut/');
   await writeFile(join(root, 'cancel.mp4'), Buffer.alloc(8 * 1024 * 1024));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -59,6 +67,31 @@ try {
     assert.equal(head.headers.get('content-length'), '10');
     assert.equal(await head.text(), '');
   }
+  const prefixedApp = createMiniConnect(() => undefined);
+  prefixedApp.use(distStaticMiddleware(root, '/openchatcut/'));
+  const prefixedServer = createServer((req, res) => prefixedApp.handle(req, res));
+  prefixedServer.listen(0, '127.0.0.1');
+  await once(prefixedServer, 'listening');
+  const prefixedAddress = prefixedServer.address();
+  assert(prefixedAddress && typeof prefixedAddress !== 'string');
+  const prefixedOrigin = `http://127.0.0.1:${prefixedAddress.port}`;
+  assert.equal(await (await fetch(`${prefixedOrigin}/openchatcut/app.js`)).text(), content);
+  assert.equal(await (await fetch(`${prefixedOrigin}/openchatcut/editor-route`)).text(), '<html>fixture</html>');
+  prefixedServer.closeAllConnections();
+  await new Promise<void>((resolve, reject) => prefixedServer.close((error) => error ? reject(error) : resolve()));
+  const inferredApp = createMiniConnect(() => undefined);
+  inferredApp.use(distStaticMiddleware(inferredRoot));
+  const inferredServer = createServer((req, res) => inferredApp.handle(req, res));
+  inferredServer.listen(0, '127.0.0.1');
+  await once(inferredServer, 'listening');
+  const inferredAddress = inferredServer.address();
+  assert(inferredAddress && typeof inferredAddress !== 'string');
+  assert.equal(
+    await (await fetch(`http://127.0.0.1:${inferredAddress.port}/openchatcut/assets/app.js`)).text(),
+    content,
+  );
+  inferredServer.closeAllConnections();
+  await new Promise<void>((resolve, reject) => inferredServer.close((error) => error ? reject(error) : resolve()));
   for (const [range, expected, contentRange] of [
     ['bytes=2-5', '2345', 'bytes 2-5/10'], ['bytes=-3', '789', 'bytes 7-9/10'], ['bytes=7-', '789', 'bytes 7-9/10'],
   ]) {

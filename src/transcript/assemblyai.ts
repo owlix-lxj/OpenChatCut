@@ -7,6 +7,7 @@
 // not get re-fetched + re-uploaded whole. Cloud callers may fall back to the
 // original path; browser-local ASR requires the compact extract.
 import type { TranscriptResult } from './types';
+import type { AsrModelTier } from './local-asr-types';
 import { getMediaBlob } from '../persist/mediaBlobStore';
 
 const ASSEMBLYAI_POLL_DEADLINE_MS = 30 * 60 * 1000;
@@ -88,6 +89,8 @@ export interface TranscribeOptions {
    * When set, skip another extract-audio call.
    */
   asrPath?: string | null;
+  /** Force a specific on-device tier for accuracy-sensitive local workflows. */
+  localModelTier?: AsrModelTier;
 }
 
 export type AssemblyAiProviderStatus =

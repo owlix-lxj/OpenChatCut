@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_dir=/etc/heygen-egress
+subscription_file="$config_dir/subscription-url"
+work_dir=$(mktemp -d /tmp/heygen-egress-refresh.XXXXXX)
+
+cleanup() {
+  find "$work_dir" -type f -delete 2>/dev/null || true
+  find "$work_dir" -depth -type d -empty -delete 2>/dev/null || true
+}
+trap cleanup EXIT
+
+subscription_url=$(sed -n '1p' "$subscription_file")
+test -n "$subscription_url"
+
+curl --fail --location --silent --show-error \
+  --connect-timeout 15 --max-time 90 \
+  -A 'clash.meta' \
+  -o "$work_dir/raw.yaml" \
+  "$subscription_url"
+
+RAW_CONFIG="$work_dir/raw.yaml" OUTPUT_CONFIG="$work_dir/config.yaml" python3 <<'PY'
+import os
+import sys
+
+import yaml
+
+
+def is_region_node(name: object) -> bool:
+    if not isinstance(name, str) or len(name) < 2:
+        return False
+    # Subscription notices are encoded as proxy entries too. Real nodes in this
+    # subscription consistently begin with a two-codepoint country flag.
+    return all(0x1F1E6 <= ord(ch) <= 0x1F1FF for ch in name[:2]) and "test" not in name.lower()
+
+
+with open(os.environ["RAW_CONFIG"], "r", encoding="utf-8") as source:
+    config = yaml.safe_load(source)
+
+if not isinstance(config, dict):
+    raise SystemExit("subscription did not contain a YAML mapping")
+
+proxies = config.get("proxies")
+if not isinstance(proxies, list):
+    raise SystemExit("subscription did not contain a proxy list")
+
+filtered = []
+seen = set()
+for proxy in proxies:
+    if not isinstance(proxy, dict):
+        continue
+    name = proxy.get("name")
+    if not is_region_node(name) or name in seen:
+        continue
+    seen.add(name)
+    filtered.append(proxy)
+
+if not filtered:
+    raise SystemExit("subscription contained no regional proxy nodes")
+
+preferred = [
+    "🇸🇬新加坡-01 H 1.0x",
+    "🇯🇵日本-04 H 0.1x",
+    "🇹🇼台湾-01 T 1.0x",
+    "🇺🇸美国-04 H 1.0x",
+    "🇭🇰香港-04 H 1.0x",
+    "🇻🇳越南-01 S 1.0x",
+]
+priority = {name: index for index, name in enumerate(preferred)}
+filtered.sort(key=lambda proxy: (priority.get(proxy["name"], len(preferred)), proxy["name"]))
+node_names = [proxy["name"] for proxy in filtered]
+
+config["mixed-port"] = 17890
+config["allow-lan"] = False
+config["bind-address"] = "127.0.0.1"
+config["external-controller"] = "127.0.0.1:19090"
+config["proxies"] = filtered
+
+# A generic connectivity probe can report a node healthy even when HeyGen is
+# unreachable. Probe the actual provider endpoint; its unauthenticated 401 is a
+# valid HTTP response and therefore a successful transport-level health check.
+health_url = "https://api.heygen.com/v3/voices"
+config["proxy-groups"] = [
+    {
+        "name": "SDK DNS",
+        "type": "select",
+        "proxies": ["自动选择", "故障转移"],
+    },
+    {
+        "name": "自动选择",
+        "type": "url-test",
+        "proxies": node_names,
+        "url": health_url,
+        "interval": 60,
+        "tolerance": 50,
+        "lazy": False,
+    },
+    {
+        "name": "故障转移",
+        "type": "fallback",
+        "proxies": node_names,
+        "url": health_url,
+        "interval": 60,
+        "lazy": False,
+    },
+]
+config["rules"] = ["MATCH,SDK DNS"]
+
+with open(os.environ["OUTPUT_CONFIG"], "w", encoding="utf-8") as output:
+    yaml.safe_dump(config, output, allow_unicode=True, sort_keys=False)
+
+print(f"prepared {len(filtered)} regional proxy nodes", file=sys.stderr)
+PY
+
+mkdir -p "$work_dir/state"
+/usr/local/bin/mihomo -t -d "$work_dir/state" -f "$work_dir/config.yaml"
+
+if test -f "$config_dir/config.yaml"; then
+  install -o root -g heygen-egress -m 0640 \
+    "$config_dir/config.yaml" "$config_dir/config.yaml.previous"
+fi
+install -o root -g heygen-egress -m 0640 \
+  "$work_dir/config.yaml" "$config_dir/config.yaml.next"
+mv -f "$config_dir/config.yaml.next" "$config_dir/config.yaml"
+
+if systemctl is-active --quiet heygen-egress-proxy.service; then
+  if ! systemctl restart heygen-egress-proxy.service; then
+    if test -f "$config_dir/config.yaml.previous"; then
+      install -o root -g heygen-egress -m 0640 \
+        "$config_dir/config.yaml.previous" "$config_dir/config.yaml"
+      systemctl restart heygen-egress-proxy.service
+    fi
+    exit 1
+  fi
+fi

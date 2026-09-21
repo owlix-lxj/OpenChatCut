@@ -21,6 +21,8 @@ import { createImportTranscriptionGate, createMediaAssetsChatSeed, importMedia, 
 import { enqueueTranscription, getTranscribeJob, shouldTranscribe, untranscribedTimelineItemIdsForRevision, type TranscribeJob } from '../transcript/transcribe-jobs';
 import { shouldAutoTranscribeIngest } from '../transcript/provider';
 import { showAppToast } from '../ui/appToast';
+import type { PlatformDigitalHuman } from '../platform/platformIntegration';
+import type { CourseGenerationOptions } from '../library/digitalHumanCourseDuration';
 
 type Translate = typeof translate;
 type StartAssetTranscription = (
@@ -466,7 +468,7 @@ function useMediaAISeeds(options: EditorMediaIngestOptions) {
     if (documents.errors[0]) showAppToast(documents.errors[0], { error: true });
     const courseware = assets.some((asset) => asset.kind === 'document');
     const instruction = courseware
-      ? '请基于这些课件完成智能制课：提取每页要点，生成自然口语化的逐页讲稿，并在我确认后继续生成课程视频。不要要求我另外选择人物形象、音色或配音服务，优先使用平台默认配置。'
+      ? '请基于这些课件完成智能制课：提取每页要点，生成自然口语化的逐页讲稿，并在我确认后继续生成课程视频。生成视频前必须让我选择自己的数字人，不得使用平台公共或默认数字人。'
       : '';
     setChatSeed({
       ...seed,
@@ -481,16 +483,20 @@ function useMediaAISeeds(options: EditorMediaIngestOptions) {
       references: [{ id: tpl.id, name: tpl.name, kind: 'template' }],
     });
   }, [setChatCollapsed, setChatSeed, t]);
-  const useCoursewareAI = useCallback(async (assets: MediaAsset[], mode: 'script' | 'video') => {
+  const useCoursewareAI = useCallback(async (assets: MediaAsset[], mode: 'script' | 'video', digitalHuman?: PlatformDigitalHuman, courseOptions?: CourseGenerationOptions) => {
     if (!assets.length) return;
     setChatCollapsed(false);
     const seed = createMediaAssetsChatSeed(assets);
     if (!seed) return;
     const documents = await readProjectAssetDocuments(assets);
     if (documents.errors[0]) showAppToast(documents.errors[0], { error: true });
+    const targetMinutes = courseOptions?.targetMinutes;
+    const durationInstruction = targetMinutes
+      ? `目标成片总时长约 ${targetMinutes} 分钟。请按正常中文口播速度控制在约 ${Math.round(targetMinutes * 240)} 个汉字，并按课件页数合理分配每页时长；内容完整优先，允许少量浮动。`
+      : '';
     const instruction = mode === 'script'
-      ? '请基于这些课件制作一份逐页、口语化的智能制课讲稿：保留关键术语，补充自然过渡，给出每页建议时长，并先在对话中输出完整讲稿供我确认。'
-      : '请基于这些课件直接完成智能制课：先提取每页要点并生成自然口播稿，再按平台默认的数字人、音色和配音配置提交生成课程视频。不要要求我另外选择人物形象、音色或口播脚本；遇到缺少必要生成配置时明确告诉我缺什么。';
+      ? `请基于这些课件制作一份逐页、口语化的智能制课讲稿：保留关键术语，补充自然过渡，给出每页建议时长，并先在对话中输出完整讲稿供我确认。${durationInstruction}`
+      : `请基于这些课件完成智能制课：先提取每页要点并生成自然口播稿，讲稿确认后只使用用户已选的自定义数字人提交课程视频生成。不得调用、推荐或替换成任何平台公共数字人。\n已选数字人：${digitalHuman?.name ?? '未选择'}；内部记录 ID：${digitalHuman?.id ?? '无'}；HeyGen look ID：${digitalHuman?.provider_look_id ?? '无'}。遇到缺少必要生成配置时明确告诉我缺什么。`;
     setChatSeed({
       ...seed,
       text: `${instruction}\n${seed.text}${documents.blocks.length ? `\n${documents.blocks.join('\n')}` : ''}`,

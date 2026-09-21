@@ -66,3 +66,21 @@ export function whisperCliBin(): string {
   }
   return join(candidates[0]!);
 }
+
+/** Local multi-site video metadata resolver bundled with the desktop app. */
+export function ytDlpBin(): string {
+  const override = process.env.OPENCHATCUT_YT_DLP;
+  if (override) return override;
+  const platformKey = `${process.platform}-${process.arch}`;
+  const suffix = process.platform === 'win32' ? '.exe' : '';
+  const relative = join('yt-dlp', platformKey, `yt-dlp${suffix}`);
+  const candidates = [
+    join(import.meta.dirname, '..', 'public', relative),
+    join(process.resourcesPath ?? '', 'dist', relative),
+    join(process.resourcesPath ?? '', relative),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[0]!;
+}

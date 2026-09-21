@@ -7,8 +7,9 @@
 // treatment the editor's overlays get in src/editor/workspaceDialogs.tsx.
 import { lazy } from 'react';
 import {
-  loadMediaCleanupDialog, loadShortcutsDialog,
+  loadMediaCleanupDialog, loadSettingsDialog, loadShortcutsDialog,
 } from './dashboardDialogLoaders';
 
 export const ShortcutsDialog = lazy(() => loadShortcutsDialog().then((m) => ({ default: m.ShortcutsDialog })));
 export const MediaCleanupDialog = lazy(() => loadMediaCleanupDialog().then((m) => ({ default: m.MediaCleanupDialog })));
+export const SettingsDialog = lazy(() => loadSettingsDialog().then((m) => ({ default: m.SettingsDialog })));

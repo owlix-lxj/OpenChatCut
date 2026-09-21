@@ -17,7 +17,7 @@ async function crashAndWait(win: BrowserWindow): Promise<void> {
   win.webContents.forcefullyCrashRenderer();
   await recovered;
   const title = await win.webContents.executeJavaScript('document.title') as unknown;
-  if (title !== 'OpenChatCut') throw new Error(`renderer recovered with unexpected title: ${String(title)}`);
+  if (title !== 'AI-cut') throw new Error(`renderer recovered with unexpected title: ${String(title)}`);
 }
 
 async function waitForTranscript(win: BrowserWindow, name: string): Promise<void> {

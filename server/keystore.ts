@@ -412,11 +412,13 @@ export function computeCaps(): Caps {
   const imageConfigured = has("IMAGE_API_KEY") || has("OPENAI_API_KEY") || has("LLM_OPENAI_API_KEY");
   const voiceConfigured =
     (has("DOUBAO_TTS_APP_ID") && has("DOUBAO_TTS_ACCESS_KEY")) || has("MINIMAX_API_KEY") || has("LLM_QWEN_API_KEY");
+  const platformVoiceConfigured =
+    (has("DOUBAO_TTS_APP_ID") && has("DOUBAO_TTS_ACCESS_KEY")) || has("MINIMAX_API_KEY");
   const videoConfigured = has("SEEDANCE_API_KEY");
   return {
     image:
       platformManaged ? imageConfigured : imageConfigured || has("GEMINI_API_KEY") || has("MINIMAX_API_KEY") || has("WAVESPEED_API_KEY") || has("BYTEPLUS_API_KEY"),
-    voice: platformManaged ? voiceConfigured :
+    voice: platformManaged ? platformVoiceConfigured :
       voiceConfigured ||
       has("ELEVENLABS_API_KEY") ||
       has("INWORLD_TTS_API_KEY") ||
@@ -427,8 +429,7 @@ export function computeCaps(): Caps {
       (getKey("PREFERRED_VOICE_VENDOR") === "mistral" && has("LLM_MISTRAL_API_KEY")) ||
       (getKey("PREFERRED_VOICE_VENDOR") === "cartesia" && has("CARTESIA_API_KEY")) ||
       (getKey("PREFERRED_VOICE_VENDOR") === "qwen" && has("LLM_QWEN_API_KEY")),
-    video: platformManaged ? videoConfigured :
-      videoConfigured || has("KLING_API_KEY") || has("MINIMAX_API_KEY") || has("BYTEPLUS_API_KEY") || has("LLM_OFOX_API_KEY") ||
+    video: videoConfigured || has("KLING_API_KEY") || has("MINIMAX_API_KEY") || has("BYTEPLUS_API_KEY") || has("LLM_OFOX_API_KEY") ||
       (has("JIMENG_ACCESS_KEY") && has("JIMENG_SECRET_KEY")),
     music: has("MUREKA_API_KEY") || has("MINIMAX_API_KEY") || has("ATLASCLOUD_API_KEY") || has("SONILO_API_KEY"),
     sound: has("ELEVENLABS_API_KEY") || has("SONILO_API_KEY"),
@@ -438,8 +439,7 @@ export function computeCaps(): Caps {
       has("UNSPLASH_ACCESS_KEY") ||
       has("FREESOUND_API_KEY") ||
       has("FIRECRAWL_API_KEY"),
-    transcription:
-      getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "local" ||
+    transcription: getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "local" ||
       has("ASSEMBLYAI_API_KEY") ||
       (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "openai" && has("OPENAI_API_KEY")) ||
       (getKey("PREFERRED_TRANSCRIPTION_PROVIDER") === "mistral" && has("LLM_MISTRAL_API_KEY")) ||

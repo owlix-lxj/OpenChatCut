@@ -72,17 +72,17 @@ export const localAsrPage = transcriptionPage('local', 'localasr', '本地模型
     name: 'LOCAL_ASR_MODEL',
     label: '默认模型',
     kind: 'select',
-    defaultLabel: '自动（按设备内存选择）',
-    note: '选中的模型需已下载；未选择时按设备内存自动挑选（内存 ≥6GB 用 Small，否则 Base）。',
+    defaultLabel: 'Whisper Large v3（桌面版内置）',
+    note: '桌面版默认使用内置的完整精度 Large v3，无需另行下载。',
     options: [
       { value: 'tiny', label: 'Whisper Tiny（约 100MB · 最快）' },
       { value: 'base', label: 'Whisper Base（约 80MB · 均衡）' },
       { value: 'small', label: 'Whisper Small（约 250MB · 推荐）' },
       { value: 'medium', label: 'Whisper Medium（约 1.1GB · 精度最高）' },
-      { value: 'large-v3-turbo', label: 'Whisper Large v3 Turbo（约 1.1GB · 多语言最强）' },
+      { value: 'large-v3-turbo', label: 'Whisper Large v3（约 3.1GB · 完整精度）' },
     ],
   },
-], '转写在本机完成：免费、离线、素材不出本机。模型按需下载（见下方列表），自动选择设备优势后端：WebGPU 不可用时回退 CPU。本地转写不含说话人分离（全部归为同一位说话人）。');
+], '转写在本机完成：免费、离线、素材不出本机。桌面版内置完整精度 Whisper Large v3，其他模型可按需安装。本地转写不含说话人分离（全部归为同一位说话人）。');
 
 export const VOICE_SETTINGS_GROUP: SettingsGroup = {
   key: 'voice',
@@ -99,7 +99,6 @@ export const VOICE_SETTINGS_GROUP: SettingsGroup = {
     { value: 'gemini', label: 'Google Gemini' },
     { value: 'mistral', label: 'Mistral Voxtral' },
     { value: 'cartesia', label: 'Cartesia' },
-    { value: 'qwen', label: '阿里云百炼 Qwen' },
   ]),
   vendors: [
     {
@@ -178,15 +177,6 @@ export const VOICE_SETTINGS_GROUP: SettingsGroup = {
         modelText('CARTESIA_TTS_MODEL', '配音模型', 'sonic-3'),
       ],
     },
-    {
-      key: 'voice/qwen', vendor: 'qwen', title: '阿里云百炼 Qwen-Audio',
-      note: '使用同一个 LLM_QWEN_API_KEY。推荐 qwen-audio-3.0-tts-plus（高质量）或 qwen-audio-3.0-tts-flash（更低延迟）。系统音色：plus 可用 longanlingxin / longanlufeng；flash 可用 longanfengyue、longanlingxi、longanxiaoxin 等。',
-      fields: [
-        secret('LLM_QWEN_API_KEY', '百炼 API Key'),
-        text('QWEN_AUDIO_BASE_URL', '音频 Base URL', '默认 https://dashscope.aliyuncs.com'),
-        modelSelect('QWEN_TTS_MODEL', '配音模型', 'qwen-audio-3.0-tts-plus', ['qwen-audio-3.0-tts-plus', 'qwen-audio-3.0-tts-flash']),
-      ],
-    },
   ],
 };
 
@@ -203,7 +193,6 @@ export const TRANSCRIPTION_SETTINGS_GROUP: SettingsGroup = {
     { value: 'groq', label: 'Groq（云端）' },
     { value: 'elevenlabs', label: 'ElevenLabs Scribe（云端）' },
     { value: 'cartesia', label: 'Cartesia（云端）' },
-    { value: 'qwen', label: '阿里云百炼 Qwen-Audio（云端）' },
   ], 'AssemblyAI（默认）'),
   vendors: [
     transcriptionPage('assemblyai', 'assemblyai', 'AssemblyAI', [secret('ASSEMBLYAI_API_KEY', 'API Key')]),
@@ -235,11 +224,6 @@ export const TRANSCRIPTION_SETTINGS_GROUP: SettingsGroup = {
       secret('CARTESIA_API_KEY', 'API Key'),
       modelText('CARTESIA_TRANSCRIPTION_MODEL', '转写模型', 'ink-whisper'),
     ]),
-    transcriptionPage('qwen', 'qwen', '阿里云百炼 Qwen-Audio', [
-      secret('LLM_QWEN_API_KEY', '百炼 API Key'),
-      text('QWEN_AUDIO_BASE_URL', '音频 Base URL', '默认 https://dashscope.aliyuncs.com'),
-      modelSelect('QWEN_ASR_MODEL', '转写模型', 'qwen-audio-3.0-asr-flash', ['qwen-audio-3.0-asr-flash']),
-    ], '支持 Base64 音频和词级时间戳，适合音视频字幕与口播剪辑；当前同步接口单次音频上限以百炼接口返回为准，长音频说话人分离需使用 Filetrans 公网 URL 任务。'),
   ],
 };
 

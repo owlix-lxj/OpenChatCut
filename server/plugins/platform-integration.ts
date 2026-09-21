@@ -11,14 +11,18 @@ import { DouyinResolveError, resolveDouyinShare } from '../douyin-resolver.ts';
 import { maxUploadBytes } from './upload-route-http.ts';
 import {
   clearPlatformSessionCookie,
+  clearDesktopPlatformSession,
+  desktopPlatformSessionConfigured,
   mintPlatformSession,
   platformManaged,
   platformSession,
   platformSessionCookie,
+  withPlatformSession,
   verifyPlatformSession,
 } from '../platform-session.ts';
 import { withPlatformStorageScope } from '../platform-storage-scope.ts';
 import { platformStorageScope } from '../platform-session.ts';
+import { DEFAULT_PLATFORM_API_BASE_URL } from '../../shared/platform-config.ts';
 
 const consumedLaunches = new Map<string, number>();
 
@@ -44,16 +48,20 @@ async function jsonBody(req: IncomingMessage, maxBytes = 64 * 1024): Promise<Rec
 }
 
 function platformApiBase(): string {
-  return (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL ?? '').trim().replace(/\/$/, '');
+  return (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL ?? DEFAULT_PLATFORM_API_BASE_URL)
+    .trim().replace(/\/$/, '');
 }
 
 export async function platformRequest(path: string, token: string, init: RequestInit = {}): Promise<Response> {
   const base = platformApiBase();
-  if (!base) throw new Error('OPENCHATCUT_PLATFORM_API_BASE_URL is not configured');
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  return fetch(`${base}${path}`, { ...init, headers });
+  return fetch(`${base}${path}`, {
+    ...init,
+    headers,
+    signal: init.signal ?? AbortSignal.timeout(15_000),
+  });
 }
 
 export type PlatformMaterialType = 'VIDEO' | 'IMAGE' | 'AUDIO' | 'DOCUMENT';
@@ -164,15 +172,203 @@ function sessionInfo(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
+async function logout(res: ServerResponse): Promise<void> {
+  try {
+    await clearDesktopPlatformSession();
+    res.setHeader('Set-Cookie', clearPlatformSessionCookie());
+    sendJson(res, 200, { ok: true });
+  } catch (error) {
+    sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function materials(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const session = platformSession(req);
   if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
   if (req.method !== 'GET') { sendJson(res, 405, { error: 'method not allowed' }); return; }
-  const query = new URL(req.url ?? '/', 'http://localhost').search;
-  const response = await platformRequest(`/v1/video-editor/materials${query}`, session.token);
-  res.statusCode = response.status;
-  res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
-  res.end(Buffer.from(await response.arrayBuffer()));
+  try {
+    const query = new URL(req.url ?? '/', 'http://localhost').search;
+    const response = await platformRequest(`/v1/video-editor/materials${query}`, session.token);
+    res.statusCode = response.status;
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    sendJson(res, 502, {
+      error: 'platform materials request failed',
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function uploadDigitalHumanSource(
+  token: string,
+  source: string,
+  contentType: string,
+): Promise<string> {
+  const filename = basename(source);
+  if (!source.startsWith('/media/uploads/') || !isSafeUploadName(filename)) {
+    throw new Error('invalid local digital human source');
+  }
+  const file = resolveUploadFile(filename);
+  if (!file) throw new Error('invalid local digital human source');
+  const fileStat = await stat(file);
+  if (!fileStat.isFile() || fileStat.size <= 0 || fileStat.size > 1024 * 1024 * 1024) {
+    throw new Error('digital human source must be a file smaller than 1 GB');
+  }
+  const credential = await signPlatformOssUpload(token, {
+    fileName: filename,
+    contentType,
+    sizeBytes: fileStat.size,
+  });
+  const uploaded = await fetch(credential.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType, 'Content-Length': String(fileStat.size) },
+    body: createReadStream(file) as unknown as BodyInit,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
+  if (!uploaded.ok) throw new Error(`digital human source upload failed: ${uploaded.status}`);
+  await createPlatformMaterial(token, {
+    type: credential.type,
+    name: filename,
+    objectKey: credential.objectKey,
+    sourceUrl: credential.sourceUrl,
+    mimeType: contentType,
+    sizeBytes: fileStat.size,
+  });
+  return credential.sourceUrl;
+}
+
+async function digitalHumans(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const session = platformSession(req);
+  if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
+  if (!['GET', 'POST', 'DELETE'].includes(req.method ?? '')) {
+    sendJson(res, 405, { error: 'method not allowed' }); return;
+  }
+  try {
+    const current = new URL(req.url ?? '/', 'http://localhost');
+    const suffix = current.pathname === '/' ? '' : current.pathname;
+    const target = `/v1/video-editor/digital-humans${suffix}${current.search}`;
+    let body: Record<string, unknown> | undefined;
+    if (req.method === 'POST') {
+      body = await jsonBody(req);
+      if (!suffix) {
+        const avatarType = typeof body.type === 'string' ? body.type : '';
+        if (avatarType === 'prompt') {
+          const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+          if (!prompt) throw new Error('prompt avatar description is required');
+        } else {
+			const source = typeof body.source === 'string' ? body.source : '';
+			const contentType = typeof body.source_content_type === 'string' ? body.source_content_type : '';
+			if (!source || !contentType) throw new Error('digital human source is required');
+			body.source_url = await uploadDigitalHumanSource(session.token, source, contentType);
+			delete body.source;
+        }
+      }
+    }
+    const response = await platformRequest(target, session.token, {
+      method: req.method,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    res.statusCode = response.status;
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    sendJson(res, 502, {
+      error: 'digital human request failed',
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function digitalHumanVoices(req: IncomingMessage, res: ServerResponse): Promise<void> {
+	const session = platformSession(req);
+	if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
+	if (!['GET', 'POST', 'DELETE'].includes(req.method ?? '')) { sendJson(res, 405, { error: 'method not allowed' }); return; }
+	try {
+		const current = new URL(req.url ?? '/', 'http://localhost');
+		const suffix = current.pathname === '/' ? '' : current.pathname;
+		let body: Record<string, unknown> | undefined;
+		if (req.method === 'POST') {
+			body = await jsonBody(req);
+			if (!suffix) {
+				const source = typeof body.source === 'string' ? body.source : '';
+				const contentType = typeof body.source_content_type === 'string' ? body.source_content_type : '';
+				if (!source || !contentType.startsWith('audio/')) throw new Error('voice clone audio source is required');
+				body.source_url = await uploadDigitalHumanSource(session.token, source, contentType);
+				delete body.source;
+			}
+		}
+		const response = await platformRequest(`/v1/video-editor/digital-human-voices${suffix}${current.search}`, session.token, {
+			method: req.method,
+			body: body ? JSON.stringify(body) : undefined,
+		});
+		res.statusCode = response.status;
+		res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+		res.setHeader('Cache-Control', req.method === 'GET' && !suffix ? 'private, max-age=300' : 'no-store');
+		res.end(Buffer.from(await response.arrayBuffer()));
+	} catch (error) {
+		sendJson(res, 502, { error: 'digital human voices request failed', detail: error instanceof Error ? error.message : String(error) });
+	}
+}
+
+async function digitalHumanVideos(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const session = platformSession(req);
+  if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
+  if (!['GET', 'POST'].includes(req.method ?? '')) { sendJson(res, 405, { error: 'method not allowed' }); return; }
+  try {
+    const current = new URL(req.url ?? '/', 'http://localhost');
+    const suffix = current.pathname === '/' ? '' : current.pathname;
+    const target = `/v1/video-editor/digital-human-videos${suffix}${current.search}`;
+    const body = req.method === 'POST' ? await jsonBody(req, 2 * 1024 * 1024) : undefined;
+    const response = await platformRequest(target, session.token, {
+      method: req.method,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    res.statusCode = response.status;
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    sendJson(res, 502, { error: 'digital human video request failed', detail: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function digitalHumanMediaJobs(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const session = platformSession(req);
+  if (!session) { sendJson(res, 401, { error: 'platform session required' }); return; }
+  if (!['GET', 'POST', 'DELETE'].includes(req.method ?? '')) { sendJson(res, 405, { error: 'method not allowed' }); return; }
+  try {
+    const current = new URL(req.url ?? '/', 'http://localhost');
+    const suffix = current.pathname === '/' ? '' : current.pathname;
+    let body: Record<string, unknown> | undefined;
+    if (req.method === 'POST') {
+      body = await jsonBody(req, 2 * 1024 * 1024);
+      if (!suffix) {
+        const videoSource = typeof body.video_source === 'string' ? body.video_source : '';
+        const videoType = typeof body.video_content_type === 'string' ? body.video_content_type : '';
+        if (!videoSource || !videoType.startsWith('video/')) throw new Error('local video source is required');
+        body.video_url = await uploadDigitalHumanSource(session.token, videoSource, videoType);
+        if (body.kind === 'lipsync') {
+          const audioSource = typeof body.audio_source === 'string' ? body.audio_source : '';
+          const audioType = typeof body.audio_content_type === 'string' ? body.audio_content_type : '';
+          if (!audioSource || !audioType.startsWith('audio/')) throw new Error('local audio source is required');
+          body.audio_url = await uploadDigitalHumanSource(session.token, audioSource, audioType);
+        }
+        delete body.video_source; delete body.video_content_type;
+        delete body.audio_source; delete body.audio_content_type;
+      }
+    }
+    const response = await platformRequest(`/v1/video-editor/digital-human-media-jobs${suffix}${current.search}`, session.token, {
+      method: req.method, body: body ? JSON.stringify(body) : undefined,
+    });
+    res.statusCode = response.status;
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    sendJson(res, 502, { error: 'digital human media request failed', detail: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 async function registerExport(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -232,6 +428,7 @@ async function importDouyin(req: IncomingMessage, res: ServerResponse): Promise<
     const body = await jsonBody(req);
     const shareText = typeof body.shareText === 'string' ? body.shareText
       : typeof body.url === 'string' ? body.url : '';
+    const registerMaterial = body.registerMaterial !== false;
     if (!shareText.trim()) { sendJson(res, 400, { error: 'shareText is required', code: 'invalid' }); return; }
 
     const resolved = await resolveDouyinShare(shareText);
@@ -294,10 +491,12 @@ async function importDouyin(req: IncomingMessage, res: ServerResponse): Promise<
     if (!putResponse.ok) throw new DouyinResolveError('oss', `OSS 上传失败 HTTP ${putResponse.status}`);
 
     const contentHash = hash.digest('hex');
-    await createPlatformMaterial(session.token, {
-      type: 'VIDEO', name: resolved.title, objectKey: credential.objectKey,
-      sourceUrl: credential.sourceUrl, mimeType: contentType, sizeBytes: bytes,
-    });
+    if (registerMaterial) {
+      await createPlatformMaterial(session.token, {
+        type: 'VIDEO', name: resolved.title, objectKey: credential.objectKey,
+        sourceUrl: credential.sourceUrl, mimeType: contentType, sizeBytes: bytes,
+      });
+    }
     await registerOssReference(uploadDir(), storedName, {
       sourceUrl: credential.sourceUrl, objectKey: credential.objectKey, bytes, contentType, contentHash,
     });
@@ -318,22 +517,25 @@ export function platformIntegrationPlugin(): Plugin {
     name: 'openchatcut-platform-integration',
     configureServer(server) {
       if (!platformManaged()) return;
-      // Establish one tenant/user scope before any upload, media, generation,
-      // export, or project-store middleware runs. AsyncLocalStorage propagates
-      // the scope through jobs and timers created while handling this request.
-      server.middlewares.use((req, _res, next) => {
-        const session = platformSession(req);
-        if (!session) { next(); return; }
-        withPlatformStorageScope(platformStorageScope(session.claims), next);
-      });
+      // Hosted deployments isolate tenant storage. The Electron server is a
+      // single-device local workspace: its login token authorizes remote API
+      // calls only and must never change local project/media paths.
+      if (!desktopPlatformSessionConfigured()) {
+        server.middlewares.use((req, _res, next) => {
+          const session = platformSession(req);
+          if (!session) { next(); return; }
+        withPlatformSession(session, () => withPlatformStorageScope(platformStorageScope(session.claims), next));
+        });
+      }
       server.middlewares.use('/api/platform/session/exchange', (req, res) => { void exchange(req, res); });
-      server.middlewares.use('/api/platform/session/logout', (_req, res) => {
-        res.setHeader('Set-Cookie', clearPlatformSessionCookie());
-        sendJson(res, 200, { ok: true });
-      });
+      server.middlewares.use('/api/platform/session/logout', (_req, res) => { void logout(res); });
       server.middlewares.use('/api/platform/session', sessionInfo);
       server.middlewares.use('/api/platform/materials/export', (req, res) => { void registerExport(req, res); });
       server.middlewares.use('/api/platform/import-douyin', (req, res) => { void importDouyin(req, res); });
+      server.middlewares.use('/api/platform/digital-humans', (req, res) => { void digitalHumans(req, res); });
+	  server.middlewares.use('/api/platform/digital-human-voices', (req, res) => { void digitalHumanVoices(req, res); });
+      server.middlewares.use('/api/platform/digital-human-videos', (req, res) => { void digitalHumanVideos(req, res); });
+      server.middlewares.use('/api/platform/digital-human-media-jobs', (req, res) => { void digitalHumanMediaJobs(req, res); });
       server.middlewares.use('/api/platform/materials', (req, res) => { void materials(req, res); });
     },
   };

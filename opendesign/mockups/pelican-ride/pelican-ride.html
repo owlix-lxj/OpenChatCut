@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#112f35">
+<title>鹤引龙辇 · 南天门</title>
+<style>
+:root{color-scheme:dark;--paper:#112f35;--gold:#d8b77a;--ink:#f0e5cd;--muted:#93b0a8;--line:#bda27040}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Songti SC","STSong","Noto Serif CJK SC",serif}
+main{max-width:1600px;margin:auto;padding:27px 46px 24px}
+header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:19px}
+.brand{display:flex;align-items:center;gap:13px;font-size:14px;letter-spacing:5px;color:var(--gold)}
+.seal{display:grid;place-items:center;width:33px;height:37px;border:1px solid #de9d80;background:#963f35;color:#fae4c7;font-size:12px;letter-spacing:1px;line-height:1.1}
+.edition{font-size:11px;color:var(--muted);letter-spacing:3px}
+.intro{display:flex;justify-content:space-between;align-items:flex-end;padding:30px 0 20px;gap:24px}
+.eyebrow{font-size:10px;letter-spacing:5px;color:var(--gold);margin-bottom:10px}
+h1{font-size:clamp(34px,4.8vw,66px);font-weight:400;letter-spacing:9px;margin:0}
+h1 span{color:var(--gold)}
+.intro p{font-size:12px;line-height:2;letter-spacing:3px;color:#b4c3b4;margin:0 0 5px}
+.scene{position:relative;border:1px solid var(--line);padding:7px;background:#173a3f}
+.scene::before,.scene::after{content:"";position:absolute;width:35px;height:35px;border-color:var(--gold);border-style:solid;pointer-events:none;z-index:1}
+.scene::before{top:0;left:0;border-width:1px 0 0 1px}.scene::after{right:0;bottom:0;border-width:0 1px 1px 0}
+#world{width:100%;display:block}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:21px 0;border-bottom:1px solid var(--line)}
+.caption{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:2px;color:#c9ceb5}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px #d8b77a66}
+.actions{display:flex;align-items:center;gap:9px}
+button{min-height:44px;background:#183b40;border:1px solid #a58f5e66;border-radius:2px;padding:0 18px;color:var(--ink);font:12px "Songti SC","STSong",serif;letter-spacing:2px;cursor:pointer;transition:background .2s,border-color .2s}
+button:hover{background:#254b4b;border-color:var(--gold)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+.speed-control{display:flex;align-items:center;gap:12px;padding:0 13px;min-height:44px;border:1px solid #a58f5e66}
+.speed-control label{font-size:12px;white-space:nowrap;letter-spacing:1px}
+input[type="range"]{width:115px;accent-color:var(--gold);cursor:pointer;min-height:28px}
+output{font:11px monospace;min-width:38px;color:var(--gold)}
+footer{display:flex;justify-content:space-between;margin-top:17px;font-size:10px;color:var(--muted);letter-spacing:3px}
+.line{stroke:#224344;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.gold-line{fill:none;stroke:#d8b77a;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:700px){main{padding:18px 15px}.brand{font-size:12px;letter-spacing:2px}.edition{font-size:9px;letter-spacing:1px}.intro{padding-top:24px;display:block}.intro p{margin-top:14px;font-size:11px}.scene{padding:3px;margin:0 -10px}.controls{align-items:flex-start;flex-direction:column;gap:15px}.actions{width:100%;flex-wrap:wrap}.speed-control{flex:1;justify-content:space-between;order:3;flex-basis:100%}input[type="range"]{flex:1}button{flex:1}footer{letter-spacing:1px;font-size:9px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="brand"><span class="seal" aria-hidden="true">天<br>阙</span>九霄 · 神游录</div><span class="edition">东方神话绘卷 · 壹</span></header>
+<div class="intro"><div><div class="eyebrow">云开天阙 · 鹤唳九霄</div><h1>鹤引龙辇<span>。</span></h1></div><p>一羽凌霄，万里长风。<br>自南天门起，赴九重天外。</p></div>
+<div class="scene">
+<svg id="world" viewBox="0 0 1400 760" role="img" aria-labelledby="scene-title scene-desc">
+<title id="scene-title">仙鹤在南天门前牵引龙辇</title>
+<desc id="scene-desc">青绿金碧的云海中，丹顶仙鹤展开黑白双翼，牵着朱红鎏金龙辇飞过南天门。天门高耸，有重檐、雕龙金柱和南天门匾额；龙辇上的华盖、幔帐和流苏随风摇动。</desc>
+<defs>
+<linearGradient id="sky" x2="0" y2="1"><stop stop-color="#173940"/><stop offset=".58" stop-color="#528078"/><stop offset="1" stop-color="#a6b8a0"/></linearGradient>
+<radialGradient id="sun-halo"><stop stop-color="#edcf8d" stop-opacity=".36"/><stop offset="1" stop-color="#e4cb91" stop-opacity="0"/></radialGradient>
+<linearGradient id="jade" x2="0" y2="1"><stop stop-color="#327a75"/><stop offset="1" stop-color="#173e45"/></linearGradient>
+<linearGradient id="gold" x2=".8" y2="1"><stop stop-color="#f6df9a"/><stop offset=".48" stop-color="#c49b4e"/><stop offset="1" stop-color="#f1d28b"/></linearGradient>
+<linearGradient id="red" x2="1" y2=".5"><stop stop-color="#743b35"/><stop offset=".55" stop-color="#a7523e"/><stop offset="1" stop-color="#6b342d"/></linearGradient>
+<linearGradient id="feathers" x2=".3" y2="1"><stop stop-color="#fff9e6"/><stop offset="1" stop-color="#b9cec3"/></linearGradient>
+<linearGradient id="mist" x2="0" y2="1"><stop stop-color="#d1d8bc" stop-opacity="0"/><stop offset="1" stop-color="#d1d8bc" stop-opacity=".8"/></linearGradient>
+<pattern id="paper" width="8" height="9" patternUnits="userSpaceOnUse"><circle cx="1" cy="2" r=".5" fill="#ecdcba" opacity=".11"/><circle cx="6" cy="7" r=".5" fill="#071d26" opacity=".14"/></pattern>
+<g id="cloud-scroll">
+<path d="M-120 38C-105 16-74 12-51 23C-51-2-23-18 1-8C12-39 54-39 68-15C98-33 128-17 128 7C168-5 198 10 202 30C232 23 250 32 260 44H-120Z" fill="#bfd1ba"/>
+<path d="M-75 35C-40 15-11 42 17 21C37 7 11-7-1 6C-8 15 0 23 10 21M38 28C70 40 80 8 104 12C119 15 117 29 105 29M139 30Q165 15 191 31" fill="none" stroke="#e5dfb6" stroke-width="1.5" opacity=".65"/>
+</g>
+<g id="pavilion">
+<path d="M-38 0H38V78H-38Z" fill="#457971"/><path d="M-28 8V75M0 8V75M28 8V75" stroke="#d2be86" stroke-width="4"/>
+<path d="M-66 5Q-39-1-24-25H24Q39-1 66 5L47 14H-47Z" fill="#306060" stroke="#b4b782" stroke-width="2"/>
+<path d="M-29-26Q0-35 29-26M-52 84H52" fill="none" stroke="#c2c490" stroke-width="3"/>
+</g>
+<g id="pillar-dragon" fill="none" stroke="#d0b579" stroke-linecap="round">
+<path d="M0 10C-35 38 31 48 5 81S-24 127 6 149S25 185-2 212S-19 250 3 264" stroke-width="9"/>
+<path d="M0 10C-35 38 31 48 5 81S-24 127 6 149S25 185-2 212S-19 250 3 264" stroke="#876d42" stroke-width="3"/>
+<path d="M-1 53L-22 65L-30 60M3 140L25 127L31 134M-4 213L-24 223L-29 217" stroke-width="3"/>
+<path d="M0 13L-12 7L-7-1L9 1L14 10L6 18Z" fill="#dbbb77" stroke-width="2"/><path d="M-6 1L-14-11M6 1L13-12M-11 10Q-25 2-27 14"/>
+<circle cx="-4" cy="7" r="1.5" fill="#284342" stroke="none"/>
+</g>
+<g id="crane-small" fill="#e4e6d0"><path d="M-18 3Q0-7 20 1L38-5L46-4L26 3L13 7Q-3 14-18 3M-2 3Q-19-11-23-26Q1-18 10 3M3 5Q9 20-2 27Q20 20 20 5Z"/></g>
+<clipPath id="frame-clip"><rect width="1400" height="760"/></clipPath>
+</defs>
+<g clip-path="url(#frame-clip)">
+<rect width="1400" height="760" fill="url(#sky)"/>
+<ellipse cx="1030" cy="202" rx="355" ry="285" fill="url(#sun-halo)"/>
+<circle cx="1040" cy="181" r="87" fill="#d5c794" opacity=".59"/>
+<circle cx="1040" cy="181" r="100" fill="none" stroke="#e6d295" opacity=".33"/>
+<g fill="none" stroke="#b9c29c" opacity=".27"><path d="M1018 25V63M1196 181H1234M119 92H286M211 85H323M1069 318H1264"/><circle cx="1040" cy="181" r="113" stroke-dasharray="1 16"/></g>
+<!-- Floating mountains and distant celestial palaces. -->
+<g opacity=".45">
+<path d="M0 531L55 432L82 451L130 322L161 394L192 370L247 529L309 451L351 503L423 402L484 534L569 420L597 487L658 376L704 477L761 447L801 540Z" fill="#285557"/>
+<path d="M788 539L830 433L866 462L910 361L947 439L991 411L1027 500L1081 433L1124 302L1157 368L1176 344L1209 472L1251 430L1300 519L1352 390L1400 437V632H788Z" fill="#366663"/>
+<path d="M130 322L133 430L163 478M1124 302L1111 439L1087 488M658 376L642 492" stroke="#b4b88b" stroke-width="2" fill="none"/>
+<g transform="translate(1205 374) scale(.65)"><use href="#pavilion"/></g><g transform="translate(180 390) scale(.45)"><use href="#pavilion"/></g>
+</g>
+<g id="clouds-far" opacity=".32"><use href="#cloud-scroll" transform="translate(60 330) scale(1.4 .45)"/><use href="#cloud-scroll" transform="translate(610 225) scale(1.2 .35)"/><use href="#cloud-scroll" transform="translate(1180 350) scale(1.5 .4)"/></g>
+<!-- The South Heavenly Gate: gilded roofs, vermilion columns, dragon reliefs. -->
+<g id="heaven-gate" transform="translate(150 12)">
+<path d="M45 594L91 568H585L638 594V624H45Z" fill="#879b85" stroke="#c5c59b" stroke-width="2"/>
+<path d="M61 610H621M80 600H605M97 586H586" class="gold-line" opacity=".5"/>
+<g fill="url(#red)" stroke="#d4b472" stroke-width="2">
+<path d="M119 274H153V572H119Z"/><path d="M516 274H550V572H516Z"/>
+<path d="M195 247H235V576H195Z"/><path d="M435 247H475V576H435Z"/>
+</g>
+<g fill="#bc9b62"><path d="M111 279H161V294H111ZM507 279H559V294H507ZM184 251H246V269H184ZM424 251H486V269H424Z"/><path d="M107 561H165V580H107ZM504 561H562V580H504ZM184 560H247V580H184ZM423 560H486V580H423Z"/></g>
+<g opacity=".95"><use href="#pillar-dragon" transform="translate(215 284)"/><use href="#pillar-dragon" transform="translate(455 284) scale(-1 1)"/></g>
+<path d="M106 261H565V296H106Z" fill="#234f50" stroke="#cfb16f" stroke-width="2"/>
+<path d="M114 278H558M161 264V290M181 264V290M493 264V290M513 264V290" class="gold-line"/>
+<path d="M73 250Q142 251 195 187H476Q527 243 599 250L573 265H101Z" fill="url(#jade)" stroke="#dbbe78" stroke-width="3"/>
+<g fill="none" stroke="#90a87e" stroke-width="1.3"><path d="M204 191L137 253M228 191L179 255M253 191L222 255M282 191L269 255M313 191V255M344 191V255M375 191L391 255M405 191L437 255M433 191L481 255M461 191L528 253"/></g>
+<path d="M72 249Q91 251 92 233M598 250Q577 250 579 232" class="gold-line"/>
+<path d="M210 140H461V187H210Z" fill="#8e4537" stroke="#cfa96a" stroke-width="2"/>
+<path d="M231 148V180M253 148V180M418 148V180M440 148V180" stroke="#dfc080" stroke-width="5"/>
+<path d="M162 139Q221 135 276 89H393Q445 132 508 139L480 154H190Z" fill="url(#jade)" stroke="#e3c985" stroke-width="3"/>
+<path d="M177 140Q190 131 187 116M492 140Q479 131 482 116M274 89Q331 81 396 89" class="gold-line"/>
+<g fill="none" stroke="#afbd88"><path d="M280 91L214 141M295 91L254 144M315 89L295 145M337 89V145M357 89L379 145M377 89L420 144M391 92L455 141"/></g>
+<path d="M295 84Q313 79 318 65L333 75L349 65Q354 79 374 84" fill="none" stroke="#dcbd78" stroke-width="3"/>
+<circle cx="336" cy="62" r="8" fill="#dfbd77"/>
+<rect x="269" y="167" width="132" height="52" rx="2" fill="#183e43" stroke="#dbba71" stroke-width="4"/>
+<rect x="276" y="174" width="118" height="38" fill="none" stroke="#89784e"/>
+<text x="335" y="202" text-anchor="middle" fill="#f6d993" font-family="STKaiti,KaiTi,Songti SC,serif" font-size="29" letter-spacing="7">南天门</text>
+<g fill="#d9b375"><path d="M82 269V301M589 268V300" stroke="#e0c47c"/><path d="M76 301H88L93 321L82 336L72 321Z"/><path d="M583 301H595L600 321L589 336L579 321Z"/></g>
+<g fill="none" stroke="#c9bd87" opacity=".65"><path d="M99 524H188M482 524H571M112 507V550M140 507V550M167 507V550M495 507V550M523 507V550M551 507V550" stroke-width="5"/><path d="M99 509H188M482 509H571" stroke-width="3"/></g>
+</g>
+<rect y="495" width="1400" height="265" fill="url(#mist)"/>
+<g id="clouds-middle" opacity=".75"><use href="#cloud-scroll" transform="translate(5 603) scale(2 .75)"/><use href="#cloud-scroll" transform="translate(680 596) scale(1.8 .65)"/><use href="#cloud-scroll" transform="translate(1220 590) scale(1.8 .8)"/></g>
+<g id="distant-cranes" opacity=".6"><use href="#crane-small" transform="translate(1120 280) scale(.62)"/><use href="#crane-small" transform="translate(1197 310) scale(.45)"/><use href="#crane-small" transform="translate(1080 320) scale(.38)"/></g>
+<!-- Harnesses connect the carriage to the crane and follow both independently. -->
+<g fill="none" stroke-linecap="round"><path id="rein-back" d="M533 484Q730 487 915 429" stroke="#635c40" stroke-width="4"/><path id="rein-front" d="M561 522Q752 529 940 454" stroke="#e6c67d" stroke-width="3"/></g>
+<!-- Dragon carriage. -->
+<g id="carriage">
+<g transform="translate(375 485)">
+<path d="M-128 71Q-160 99-187 87Q-166 129-121 114L172 111Q203 109 216 87Q185 106 166 86Z" fill="#396966" stroke="#d6b678" stroke-width="3"/>
+<path d="M-143 96Q-65 115 23 99T190 96M-114 116Q-39 134 56 115T175 115" fill="none" stroke="#dbe0be" stroke-width="2" opacity=".7"/>
+<path d="M-117 33L-104 87Q17 120 151 81L168 31Z" fill="url(#red)" stroke="#edcc86" stroke-width="4"/>
+<path d="M-105 66Q21 90 153 58M-99 79Q20 102 147 74" class="gold-line"/>
+<path d="M-88 43V71M-52 46V77M-14 48V79M24 48V79M62 46V75M100 43V69M136 39V61" stroke="#d6ad64" stroke-width="3"/>
+<path d="M-128 26Q16 55 171 21L179 35Q12 67-132 40Z" fill="url(#gold)" stroke="#765c36" stroke-width="2"/>
+<!-- Dragon prow with horns, scales, whiskers, and a curled tail. -->
+<path d="M108 70C145 78 183 44 177 17C174-1 181-18 204-20L219-11L212 0L232 7L222 18L195 17Q217 51 185 74Q157 96 110 88Z" fill="url(#gold)" stroke="#6e5733" stroke-width="2.5"/>
+<path d="M185-17L179-38L190-33L195-43L200-21M207-14L219-34L222-24L233-29L218-9" fill="none" stroke="#dfbc74" stroke-width="4" stroke-linejoin="round"/>
+<path d="M216 13Q237 30 252 8M212 17Q231 40 248 29M189 14Q171 7 163 20" class="gold-line"/>
+<path d="M188-7L204-8L208-3L191-2Z" fill="#214749"/><circle cx="203" cy="-5" r="2" fill="#e9654e"/>
+<path d="M167 36l12 5-8 11M151 59l11 5-11 9M129 72l10 7-13 6" fill="none" stroke="#856838" stroke-width="2"/>
+<path d="M-110 74C-155 67-157 43-170 36C-188 27-201 43-192 53Q-189 37-177 48Q-164 95-117 93" fill="url(#gold)" stroke="#806439" stroke-width="2"/>
+<!-- Canopy columns and throne. -->
+<path d="M-85 28V-128M123 23V-128" stroke="#d4ac65" stroke-width="7"/>
+<path d="M-81 25V-121M126 20V-121" stroke="#f3dba4" stroke-width="1.5"/>
+<path d="M-20 27V-32Q-18-46-3-45L13-59L30-45Q45-46 46-31V27" fill="#7e3d32" stroke="#dcbb73" stroke-width="3"/>
+<path d="M-8 11V-27H33V11M-31 27V6H57V27" fill="none" stroke="#e4c486" stroke-width="3"/>
+<path d="M-82-119Q-31-108 8-125Q60-109 121-122L118-103Q59-91 10-109Q-40-91-82-101Z" fill="#a14d3c" stroke="#dcbb79" stroke-width="2"/>
+<path id="curtain" d="M-80-109Q-49-72-76 10L-106 24Q-81-43-99-113Z" fill="#a65a47" stroke="#e0b77b" stroke-width="1.5"/>
+<path d="M113-111Q91-72 119 9L133 18Q117-42 131-112Z" fill="#854237" stroke="#d6ac70" stroke-width="1.5"/>
+<path d="M-131-128Q-65-148-8-180H56Q98-145 163-128L142-112H-109Z" fill="url(#jade)" stroke="#e4c480" stroke-width="3"/>
+<path d="M-121-127Q-68-131-8-174M-78-123L9-177M-31-121L23-178M19-121L31-178M69-121L42-177M117-122L55-176" class="gold-line" opacity=".8"/>
+<path d="M-126-129L-141-144M159-130L174-145M-8-181H56" stroke="#dabb7a" stroke-width="3" fill="none"/>
+<path d="M14-186L24-199L34-186L45-192L51-179H5Z" fill="url(#gold)"/><circle cx="24" cy="-204" r="6" fill="#e7c77e"/>
+<g id="tassel-left" transform="translate(-110 -113)"><path d="M0 0V33" stroke="#d9b678" stroke-width="2"/><circle cy="35" r="4" fill="#f0d090"/><path d="M-5 43L-8 66M-2 43V71M2 43L5 70M5 42L10 64" stroke="#dbbc7e" stroke-width="2"/></g>
+<g id="tassel-right" transform="translate(144 -113)"><path d="M0 0V33" stroke="#d9b678" stroke-width="2"/><circle cy="35" r="4" fill="#f0d090"/><path d="M-5 43L-8 66M-2 43V71M2 43L5 70M5 42L10 64" stroke="#dbbc7e" stroke-width="2"/></g>
+</g>
+</g>
+<!-- The crane has a slender beak, red crown, long neck and trailing legs. -->
+<g id="crane">
+<g fill="none" stroke="#344a46" stroke-width="5" stroke-linecap="round"><path d="M813 456Q768 464 708 460L664 467M818 462Q770 477 721 479L681 489"/><path d="M666 467l-13-5m13 5-13 5M683 489l-14-3m14 3-12 7" stroke-width="2.5"/></g>
+<g transform="translate(852 419)"><g id="wing-far">
+<path d="M0 0C-1-50 43-112 111-154C92-118 72-91 54-65L86-89Q63-37 18 8Z" fill="#8ea99f" stroke="#345552" stroke-width="2"/>
+<path d="M111-154Q98-115 67-78L86-89Q61-44 30-23L41-50Z" fill="#294745"/>
+<path d="M13-7Q38-68 90-120" fill="none" stroke="#c1cdb5" stroke-width="2"/>
+</g></g>
+<path d="M831 419Q780 410 744 436L770 441L745 454L792 461Q813 483 863 471L914 452L912 414Z" fill="url(#feathers)" class="line"/>
+<path d="M779 435L744 436L770 441L745 454L792 461L817 449Z" fill="#263f3d"/>
+<path d="M877 425C929 431 957 408 977 362C988 336 1007 318 1026 323C1044 328 1046 344 1036 353C1026 361 1019 349 1015 359C998 414 976 458 917 461L881 454Z" fill="url(#feathers)" class="line"/>
+<path d="M995 330Q1014 313 1032 325L1039 336L1019 333Z" fill="#ad3c32"/>
+<path d="M1009 344Q1020 344 1026 352Q1008 357 1003 376L989 389Q997 359 1009 344Z" fill="#263f3d"/>
+<path d="M1038 339L1122 354L1037 350Z" fill="#c2a464" stroke="#4c5745" stroke-width="1.5"/>
+<path d="M1040 344L1105 352" stroke="#6e6f4d" stroke-width="1"/>
+<circle cx="1028" cy="337" r="3" fill="#263c38"/><circle cx="1029" cy="336" r=".9" fill="#fffae4"/>
+<path d="M906 417Q920 435 916 455" stroke="#b18e48" stroke-width="9" fill="none"/>
+<path d="M906 417Q920 435 916 455" stroke="#f1d796" stroke-width="3" fill="none"/>
+<circle cx="918" cy="439" r="8" fill="#b09c5b" stroke="#fbdfa0" stroke-width="2"/>
+<path d="M922 445L938 457L930 468L918 452Z" fill="#9d4336" stroke="#e1c182" stroke-width="1.5"/>
+<path id="ribbon" d="M915 431Q867 411 829 430T751 420L768 440Q803 452 840 437T915 443Z" fill="#a84739" stroke="#e2b878" stroke-width="1.3"/>
+<g transform="translate(858 432)"><g id="wing-near">
+<path d="M0 0C-16-33-42-80-64-129C-81-167-108-194-144-204C-138-178-128-154-116-135L-148-157Q-131-118-106-96L-131-106Q-101-66-78-49L-102-55Q-66-21-41-14L-58-12Q-27 16 0 0Z" fill="url(#feathers)" stroke="#31514d" stroke-width="2"/>
+<path d="M-144-204Q-146-178-116-135L-148-157Q-139-126-106-96L-131-106Q-109-72-78-49L-102-55Q-76-23-41-14L-58-12Q-31 11-10 7L-33-23Q-70-62-88-106Q-105-157-144-204Z" fill="#263f3e"/>
+<g fill="none" stroke="#65827a" stroke-width="1.7"><path d="M-139-185L-102-122M-138-144L-90-95M-117-94L-76-67M-89-45L-57-32"/></g>
+<g fill="none" stroke="#92aea2" stroke-width="2"><path d="M-13-15Q-37-61-67-93M-24-18Q-55-59-83-77M-32-22Q-66-46-83-50"/></g>
+</g></g>
+</g>
+<g id="wind" fill="none" stroke="#ede3b8" stroke-width="1.5" opacity=".45"><path d="M1146 421q58-15 126-9M1129 447q47-6 98-1M682 366q46-12 85-4M52 409q59-12 117-5"/></g>
+<g id="clouds-near"><use href="#cloud-scroll" transform="translate(35 716) scale(2.4 1)"/><use href="#cloud-scroll" transform="translate(720 739) scale(2.1 1.2)"/><use href="#cloud-scroll" transform="translate(1350 699) scale(2.2 1.1)"/></g>
+<g id="motes" fill="#f4dda0" opacity=".6"><circle cx="611" cy="457" r="2"/><circle cx="666" cy="492" r="1.5"/><circle cx="735" cy="548" r="2"/><circle cx="1118" cy="400" r="1.5"/><circle cx="989" cy="495" r="2"/><circle cx="235" cy="350" r="1.8"/><circle cx="1055" cy="563" r="1.5"/></g>
+<g id="bell-rings" fill="none" stroke="#ffe2a2" opacity="0"><circle cx="399" cy="280" r="25"/><circle cx="399" cy="280" r="38"/></g>
+<rect width="1400" height="760" fill="url(#paper)" pointer-events="none"/>
+<g fill="#e3cf9f" font-family="STKaiti,KaiTi,Songti SC,serif" text-anchor="middle"><text x="1317" y="88" font-size="21" letter-spacing="5" writing-mode="vertical-rl">乘云气 · 御飞龙 · 游乎四海之外</text></g>
+<g transform="translate(1299 416)"><rect width="33" height="41" rx="2" fill="#994536"/><text x="17" y="17" fill="#f0d6a1" font-size="12" text-anchor="middle">九霄<tspan x="17" dy="16">神游</tspan></text></g>
+<path d="M21 57V21H57M1343 21H1379V57M21 703V739H57M1343 739H1379V703" fill="none" stroke="#d4c18d" opacity=".6"/>
+</g>
+</svg>
+</div>
+<div class="controls">
+<div class="caption"><span class="dot" id="status-dot"></span><span id="status" aria-live="polite">仙鹤引驾 · 云海徐行</span></div>
+<div class="actions">
+<button id="toggle" type="button" aria-label="暂停动画">暂驻云端</button>
+<div class="speed-control"><label for="speed">御风档位</label><input id="speed" type="range" min="1" max="10" step="1" value="1" aria-valuetext="1 档，1 倍速度"><output id="speed-label" for="speed">01/10</output></div>
+<button id="bell" type="button" aria-label="鸣响仙铃">鸣响仙铃</button>
+</div>
+</div>
+<footer><span>南天门外 · 云路迢迢</span><span>青绿设色 / 金碧天宫</span></footer>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let running=true, speed=1, elapsed=0, last=null, bellTime=-10000, audio;
+  const layers=[
+    {node:$('clouds-far'),span:1700,rate:12},
+    {node:$('clouds-middle'),span:1750,rate:31},
+    {node:$('clouds-near'),span:1900,rate:67}
+  ];
+  layers.forEach(layer => {
+    layer.copy=layer.node.cloneNode(true);
+    layer.copy.removeAttribute('id');
+    layer.node.after(layer.copy);
+  });
+  const nodes=Object.fromEntries(['carriage','crane','wing-near','wing-far','rein-back','rein-front','ribbon','curtain','tassel-left','tassel-right','distant-cranes','motes','wind','bell-rings'].map(id=>[id,$(id)]));
+  const set=(id,attribute,value)=>nodes[id].setAttribute(attribute,value);
+  function status() {
+    $('status').textContent=!running?'暂驻云端 · 静听天籁':speed===10?'扶摇九万里 · 十档御风':speed>=7?'长风万里 · 鹤越九霄':speed>=4?'仙鹤引驾 · 乘风凌霄':'仙鹤引驾 · 云海徐行';
+    $('status-dot').style.opacity=running?'1':'.4';
+  }
+  function draw(t) {
+    const beat=t*2.3;
+    const craneY=Math.sin(beat)*7, carriageY=Math.sin(beat-.8)*4;
+    set('crane','transform','translate(0 '+craneY+')');
+    set('carriage','transform','translate(0 '+carriageY+')');
+    set('wing-near','transform','rotate('+(Math.sin(beat)*19+5)+') scale(1 '+(.7+.3*Math.cos(beat))+')');
+    set('wing-far','transform','rotate('+(-Math.sin(beat+.4)*17-8)+') scale(1 '+(.72+.28*Math.cos(beat+.4))+')');
+    set('rein-back','d','M533 '+(484+carriageY)+'Q730 '+(487+(craneY+carriageY)/2)+' 915 '+(429+craneY));
+    set('rein-front','d','M561 '+(522+carriageY)+'Q752 '+(529+(craneY+carriageY)/2)+' 918 '+(439+craneY));
+    const flutter=Math.sin(t*4)*10;
+    set('ribbon','d','M915 431Q867 '+(411+flutter)+' 829 430T751 '+(420-flutter)+'L768 '+(440-flutter)+'Q803 '+(452+flutter)+' 840 437T915 443Z');
+    set('curtain','d','M-80-109Q-49-72 '+(-76+flutter*.3)+' 10L'+(-106+flutter*.4)+' 24Q-81-43-99-113Z');
+    set('tassel-left','transform','translate(-110 -113) rotate('+(Math.sin(t*3)*8+8)+')');
+    set('tassel-right','transform','translate(144 -113) rotate('+(Math.sin(t*3+.7)*7+8)+')');
+    layers.forEach(layer => {
+      const x=(t*layer.rate)%layer.span;
+      layer.node.setAttribute('transform','translate('+(-x)+' 0)');
+      layer.copy.setAttribute('transform','translate('+(layer.span-x)+' 0)');
+    });
+    set('distant-cranes','transform','translate('+Math.sin(t*.3)*18+' '+Math.sin(t*1.5)*5+')');
+    set('motes','transform','translate('+(-t*19%210)+' '+Math.sin(t*.7)*16+')');
+    set('motes','opacity',.35+.2*Math.sin(t*.8));
+    set('wind','transform','translate('+(-t*24%100)+' 0)');
+    set('wind','opacity',.25+.15*Math.sin(t*1.5));
+  }
+  function frame(now) {
+    if(last!==null&&running) elapsed+=Math.min((now-last)/1000,.05)*speed;
+    last=now;
+    draw(elapsed);
+    const age=(now-bellTime)/1000;
+    set('bell-rings','opacity',age>=0&&age<1.8?(1-age/1.8)*.8:0);
+    set('bell-rings','transform','translate(399 280) scale('+(1+Math.min(Math.max(age,0),1.8)*.6)+') translate(-399 -280)');
+    requestAnimationFrame(frame);
+  }
+  $('toggle').addEventListener('click',()=>{
+    running=!running;
+    $('toggle').textContent=running?'暂驻云端':'继续御风';
+    $('toggle').setAttribute('aria-label',running?'暂停动画':'播放动画');
+    status();
+  });
+  $('speed').addEventListener('input',event=>{
+    speed=Number(event.target.value);
+    $('speed-label').value=String(speed).padStart(2,'0')+'/10';
+    $('speed').setAttribute('aria-valuetext',speed+' 档，'+speed+' 倍速度');
+    status();
+  });
+  $('bell').addEventListener('click',()=>{
+    bellTime=performance.now();
+    const Audio=window.AudioContext||window.webkitAudioContext;
+    if(!Audio)return;
+    audio ||=new Audio();
+    audio.resume().then(()=>{
+      [0,.35,.7].forEach((delay,n)=>{
+        [1,2.01,3.96].forEach((harmonic,i)=>{
+          const oscillator=audio.createOscillator(), gain=audio.createGain(), start=audio.currentTime+delay;
+          oscillator.type='sine';oscillator.frequency.value=[784,1046.5,1174.66][n]*harmonic;
+          gain.gain.setValueAtTime(0,start);
+          gain.gain.linearRampToValueAtTime(.1/(i+1),start+.008);
+          gain.gain.exponentialRampToValueAtTime(.0001,start+2.2);
+          oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(start);oscillator.stop(start+2.3);
+        });
+      });
+    }).catch(()=>{});
+  });
+  document.addEventListener('visibilitychange',()=>{last=null;});
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

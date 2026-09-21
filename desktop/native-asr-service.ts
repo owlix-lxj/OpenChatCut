@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
 import type { UtilityProcess } from 'electron';
 import { ASR_MODELS } from '../shared/asr-models.ts';
-import { inspectAsrModel } from '../server/plugins/asr-models.ts';
+import { inspectNativeAsrModel } from '../server/plugins/asr-models.ts';
 import { ffmpegBin, whisperCliBin } from '../server/media-binaries.ts';
 import { resolveUploadFile } from '../server/media-dir.ts';
 import {
@@ -52,7 +52,7 @@ export interface NativeAsrServiceOptions {
 }
 
 export interface NativeAsrServiceDependencies {
-  readonly inspectModel: typeof inspectAsrModel;
+  readonly inspectModel: typeof inspectNativeAsrModel;
   readonly createWorker: () => UtilityProcess;
   readonly resolveSourcePath: (sourcePath: string) => string;
   readonly scheduleForceKill: (callback: () => void, delayMs: number) => () => void;
@@ -149,7 +149,7 @@ export class NativeAsrService {
   private readonly whisperCliPath: string;
   private readonly cacheDir: string;
   private readonly capabilities: DesktopInferenceCapabilities;
-  private readonly inspectModel: typeof inspectAsrModel;
+  private readonly inspectModel: typeof inspectNativeAsrModel;
   private readonly createWorker: () => UtilityProcess;
   private readonly sourcePathResolver: (sourcePath: string) => string;
   private readonly scheduleForceKill: (callback: () => void, delayMs: number) => () => void;
@@ -175,7 +175,7 @@ export class NativeAsrService {
       ffmpegRuntime: ffmpegRuntimeAvailable(this.ffmpegPath),
       hardware: options.hardware,
     });
-    this.inspectModel = dependencies.inspectModel ?? inspectAsrModel;
+    this.inspectModel = dependencies.inspectModel ?? inspectNativeAsrModel;
     this.createWorker = dependencies.createWorker ?? createNativeAsrWorker;
     this.sourcePathResolver = dependencies.resolveSourcePath ?? resolveNativeAsrSourcePath;
     this.scheduleForceKill = dependencies.scheduleForceKill ?? ((callback, delayMs) => {

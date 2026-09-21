@@ -1,4 +1,5 @@
 import './chdir-first.ts';
+import { installSocialPublish } from './geo-social-publish.ts';
 import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,11 +9,15 @@ import {
   dialog,
   ipcMain,
   Menu,
+  safeStorage,
   screen,
   shell,
   type OpenDialogOptions,
   type SaveDialogOptions,
 } from 'electron';
+import { VIDEO_LINK_RESOLVER_CHANNEL } from '../shared/video-link-resolver.ts';
+import { resolveDesktopVideoLink } from './video-link-resolver.ts';
+import { chineseApplicationMenu } from './application-menu.ts';
 import { buildTextContextMenuTemplate } from './context-menu.ts';
 import { startEmbeddedServer } from './embedded-server.ts';
 import { createTransparentMovProxy, importLocalMedia } from './local-media-import.ts';
@@ -28,7 +33,7 @@ import { installDesktopInferenceIpc } from './native-inference-ipc.ts';
 import { detectDesktopHardwareProfile } from './native-hardware-profile.ts';
 import { installDirectoryWatchIpc } from './directory-watch-ipc.ts';
 import {
-  applyLoginTicket, consumeLoginCallback, deepLinkFromArgv, PLATFORM_LOGIN_PROTOCOL,
+  consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, PLATFORM_LOGIN_PROTOCOL,
   startPlatformLogin,
 } from './platform-login.ts';
 import {
@@ -77,6 +82,12 @@ import { runDesktopSmokeProbe } from './smoke-probe.ts';
 import { exitSmoke, installSmokeWatchdog } from './smoke-lifecycle.ts';
 import { runtimeProfile } from '../server/runtime-profile.ts';
 import {
+  clearDesktopPlatformSessionFile,
+  desktopPlatformSessionPath,
+  persistDesktopPlatformSession,
+  restoreDesktopPlatformSession,
+} from './platform-session-store.ts';
+import {
   applyWindowsGpuCrashFallback,
   installWindowsGpuCrashRecovery,
   installWindowsRendererRecovery,
@@ -89,6 +100,9 @@ const DIST_DIR = app.isPackaged
   ? join(process.resourcesPath, 'dist')
   : join(fileURLToPath(new URL('..', import.meta.url)), 'dist');
 const PRELOAD_PATH = join(dirname(fileURLToPath(import.meta.url)), 'preload.cjs');
+const APP_ICON_PATH = app.isPackaged
+  ? join(process.resourcesPath, 'dist', 'openchatcut-icon.png')
+  : join(fileURLToPath(new URL('..', import.meta.url)), 'public', 'openchatcut-icon.png');
 
 // CC_SMOKE=1: No window smoke - start the embedded server, load the page, explore /api/keys, and return the code 0/1 according to the result.
 // CC_SMOKE_RENDER=1 adds a true rendering probe (packaged version acceptance: pre-bundled + full browser link included in the package).
@@ -98,16 +112,41 @@ const SMOKE_TIMEOUT_MS = SMOKE_RENDER ? 240_000 : 90_000;
 let mainWindow: BrowserWindow | null = null;
 let currentOrigin: string | null = null;
 let pendingDeepLink: string | null = null;
+let platformSessionToken: string | null = null;
 
-/** Handle an openchatcut:// deep link: on a valid login callback, load the editor with the launch
- * ticket so the renderer exchanges it for a platform session. Links that arrive before the window
- * is ready (cold start) are buffered and replayed once boot finishes. */
+function platformSessionFile(): string {
+  return desktopPlatformSessionPath(app.getPath('userData'));
+}
+
+async function clearPersistedPlatformSession(): Promise<void> {
+  platformSessionToken = null;
+  await clearDesktopPlatformSessionFile(platformSessionFile());
+}
+
+/** Handle an openchatcut:// deep link: on a valid login callback, exchange the launch ticket at
+ * the remote gateway and retain the session token in this trusted main process. Links that arrive
+ * before the window is ready (cold start) are buffered and replayed once boot finishes. */
 function handlePlatformDeepLink(rawUrl: string): void {
   if (!mainWindow || !currentOrigin) { pendingDeepLink = rawUrl; return; }
   const result = consumeLoginCallback(rawUrl);
   if (!result) return;
-  applyLoginTicket(mainWindow, currentOrigin, result.ticket);
-  focusExistingWindow(mainWindow);
+  const win = mainWindow;
+  const origin = currentOrigin;
+  void exchangeDesktopSession(result.ticket).then(async (session) => {
+    platformSessionToken = session.token;
+    try {
+      await persistDesktopPlatformSession(platformSessionFile(), session.token, safeStorage);
+    } catch (error) {
+      console.warn('[desktop] platform session will remain in memory only:',
+        error instanceof Error ? error.message : String(error));
+    }
+    if (!win.isDestroyed()) void win.loadURL(`${origin}/`);
+    focusExistingWindow(win);
+  }).catch((error: unknown) => {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error('[desktop] platform login failed:', detail);
+    dialog.showErrorBox('AI-cut 登录失败', detail);
+  });
 }
 
 // macOS delivers the deep link through this event (often before the window exists).
@@ -167,10 +206,15 @@ function installDesktopPageGuards(win: BrowserWindow, trustedOrigin: string): vo
 }
 
 function registerDesktopHandlers(trustedOrigin: string): void {
+  installSocialPublish(trustedOrigin);
   // Renderer "登录": open the platform login page in the system browser. The openchatcut://
   // callback is handled by the app-level open-url / second-instance listeners.
   ipcMain.handle('openchatcut:platform-login', trustedDesktopHandler(trustedOrigin, async () => {
     await startPlatformLogin(shell.openExternal);
+  }));
+  ipcMain.handle(VIDEO_LINK_RESOLVER_CHANNEL, trustedDesktopHandler(trustedOrigin, async (_event, value: unknown) => {
+    if (typeof value !== 'string' || value.length > 4_000) throw new Error('无效的视频分享内容');
+    return resolveDesktopVideoLink(value);
   }));
   ipcMain.handle('openchatcut:select-directory', trustedDesktopHandler(trustedOrigin, async (event, requestedPath: unknown) => {
     const parent = BrowserWindow.fromWebContents(event.sender);
@@ -248,7 +292,9 @@ function registerDesktopHandlers(trustedOrigin: string): void {
   }));
   ipcMain.handle(
     LOCAL_MEDIA_IMPORT_CHANNEL,
-    trustedDesktopHandler(trustedOrigin, createLocalMediaImportHandler(importLocalMedia)),
+    trustedDesktopHandler(trustedOrigin, createLocalMediaImportHandler(
+      (sourcePath, originalName) => importLocalMedia(sourcePath, originalName),
+    )),
   );
   ipcMain.handle('openchatcut:transparent-mov-proxy', trustedDesktopHandler(trustedOrigin, async (_event, storedName: unknown) => {
     if (typeof storedName !== 'string') throw new Error('invalid local media name');
@@ -265,10 +311,11 @@ function registerDesktopHandlers(trustedOrigin: string): void {
       return;
     }
     const win = new BrowserWindow({
-      width: 420,
-      height: 560,
-      minWidth: 300,
-      minHeight: 220,
+      width: 620,
+      height: 720,
+      minWidth: 420,
+      minHeight: 320,
+      icon: existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
       backgroundColor: '#16161a',
       title: '文字稿',
       show: false,
@@ -357,6 +404,20 @@ function registerDesktopHandlers(trustedOrigin: string): void {
 
 async function boot(): Promise<void> {
   await app.whenReady();
+  Menu.setApplicationMenu(Menu.buildFromTemplate(chineseApplicationMenu(app.name)));
+  if (process.platform === 'darwin' && app.dock && existsSync(APP_ICON_PATH)) {
+    app.dock.setIcon(APP_ICON_PATH);
+  }
+  try {
+    platformSessionToken = await restoreDesktopPlatformSession(
+      platformSessionFile(),
+      safeStorage,
+    );
+    if (platformSessionToken) console.log('[desktop] restored encrypted platform session');
+  } catch (error) {
+    console.warn('[desktop] encrypted platform session restore failed:',
+      error instanceof Error ? error.message : String(error));
+  }
   if (app.isPackaged) {
     const missing = missingRuntimeAssets(packagedRuntimeAssetChecks({
       resourcesPath: process.resourcesPath,
@@ -377,7 +438,10 @@ async function boot(): Promise<void> {
     packaged: app.isPackaged,
     smoke: SMOKE,
   });
-  const origin = devOrigin ?? (await startEmbeddedServer(DIST_DIR)).origin;
+  const origin = devOrigin ?? (await startEmbeddedServer(DIST_DIR, {
+    platformSessionToken: () => platformSessionToken,
+    clearPlatformSession: clearPersistedPlatformSession,
+  })).origin;
   currentOrigin = origin;
   registerDesktopHandlers(origin);
   installProjectStoreIpc(origin);
@@ -443,8 +507,9 @@ async function boot(): Promise<void> {
   const win = new BrowserWindow({
     ...initialBounds,
     show: !SMOKE,
+    icon: existsSync(APP_ICON_PATH) ? APP_ICON_PATH : undefined,
     backgroundColor: '#111111',
-    title: 'OpenChatCut',
+    title: 'AI-cut',
     ...desktopWindowFrameOptions(),
     webPreferences: {
       preload: PRELOAD_PATH,
@@ -515,7 +580,7 @@ if (hasSingleInstanceLock) {
       // A packaged double-click has no console: without this the process just
       // disappears and the user has nothing to report (issue #140).
       try {
-        dialog.showErrorBox('OpenChatCut 启动失败 / failed to start', detail);
+        dialog.showErrorBox('AI-cut 启动失败 / failed to start', detail);
       } catch {
         // A dialog is best effort; the exit below still has to happen.
       }

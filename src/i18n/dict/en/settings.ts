@@ -517,6 +517,8 @@ export default {
   '下载': 'Download',
   '模型按需下载到本机，不随应用打包。首次使用或下载模型时自动加速下载。':
     'Models are downloaded to this machine on demand — they are not bundled with the app. Downloads use the accelerated pipeline automatically.',
+  '桌面版已内置完整精度 Whisper Large v3，无需下载；其他模型可按需安装。':
+    'The desktop app includes full-precision Whisper Large v3. No download is required; other models remain optional.',
   '桌面原生推理加速': 'Native desktop inference acceleration',
   '启用后，转写使用 macOS Metal 或原生 CPU；画面语义、节拍与音乐语义模型自动选择 Windows DirectML、Linux CUDA、macOS CoreML 或浏览器 WebGPU；失败时回退 CPU 或浏览器引擎。':
     'When enabled, transcription uses macOS Metal or native CPU. Visual-semantic, rhythm, and music-semantic models select Windows DirectML, Linux CUDA, macOS CoreML, or browser WebGPU. Failures fall back to CPU or the browser engine.',
@@ -527,6 +529,9 @@ export default {
   '无法读取模型列表：{err}': 'Cannot load the model list: {err}',
   '默认模型': 'Default model',
   '自动（按设备内存选择）': 'Auto (by device memory)',
+  'Whisper Large v3（桌面版内置）': 'Whisper Large v3 (included with desktop)',
+  '桌面版默认使用内置的完整精度 Large v3，无需另行下载。':
+    'Desktop uses the bundled full-precision Large v3 model by default, with no separate download.',
   '选中的模型需已下载；未选择时按设备内存自动挑选（内存 ≥6GB 用 Small，否则 Base）。':
     'The selected model must be downloaded first; when unset, the device memory picks automatically (≥6GB → Small, otherwise Base).',
   'Whisper Tiny（约 100MB · 最快）': 'Whisper Tiny (~100MB · fastest)',
@@ -534,6 +539,9 @@ export default {
   'Whisper Small（约 250MB · 推荐）': 'Whisper Small (~250MB · recommended)',
   'Whisper Medium（约 1.1GB · 精度最高）': 'Whisper Medium (~1.1GB · highest accuracy)',
   'Whisper Large v3 Turbo（约 1.1GB · 多语言最强）': 'Whisper Large v3 Turbo (~1.1GB · best multilingual)',
+  'Whisper Large v3（约 3.1GB · 完整精度）': 'Whisper Large v3 (~3.1GB · full precision)',
+  '转写在本机完成：免费、离线、素材不出本机。桌面版内置完整精度 Whisper Large v3，其他模型可按需安装。本地转写不含说话人分离（全部归为同一位说话人）。':
+    'Transcription is free, offline, and stays on this device. Desktop includes full-precision Whisper Large v3; other models are optional. Local transcription does not separate speakers.',
   // Downloadable music intelligence model packs
   '本地智能模型': 'Local intelligence models',
   '模型不会自动安装。安装后，节拍与音乐语义分析只在本机运行。':

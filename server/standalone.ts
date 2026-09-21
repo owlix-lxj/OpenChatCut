@@ -108,7 +108,7 @@ export async function startStandaloneServer(options: {
   }
 
   app.use('/media/uploads', uploadsMiddleware());
-  if (!apiOnly) app.use(distStaticMiddleware(distDir));
+  if (!apiOnly) app.use(distStaticMiddleware(distDir, process.env.OPENCHATCUT_BASE));
 
   await new Promise<void>((resolveListen, reject) => {
     const onError = (error: Error) => reject(error);

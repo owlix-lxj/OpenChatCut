@@ -10,7 +10,8 @@ import {
 import { resolveLlmProviderConfig } from '../llm-config.ts';
 import { xaiOauthAccessToken } from '../xai-oauth-session.ts';
 import { proxyMiddleware } from '../proxy.ts';
-import { isPlatformLlmProvider } from '../../shared/platform-config.ts';
+import { DEFAULT_PLATFORM_API_BASE_URL, isPlatformLlmProvider } from '../../shared/platform-config.ts';
+import { platformManaged, platformSession } from '../platform-session.ts';
 
 function keyReader(name: string): string {
   return getKey(name as KeyName);
@@ -20,16 +21,26 @@ export function llmProviderForRequest(req?: IncomingMessage): LlmProvider {
   const requested = req?.headers['x-openchatcut-provider'];
   const provider = requireLlmProvider(requested === undefined ? getKey('LLM_PROVIDER') : requested);
   if (isPlatformManaged() && !isPlatformLlmProvider(provider)) {
-    throw new Error('平台模式仅允许 OpenAI（喵喵 API）和 DeepSeek');
+    throw new Error('平台模式仅允许平台提供的 OpenAI 和 DeepSeek');
   }
   return provider;
 }
 
 export function llmTarget(req?: IncomingMessage): string {
-  return resolveLlmProviderConfig(llmProviderForRequest(req), keyReader).baseUrl;
+  const provider = llmProviderForRequest(req);
+  if (platformManaged()) {
+    const base = (process.env.OPENCHATCUT_PLATFORM_API_BASE_URL || DEFAULT_PLATFORM_API_BASE_URL)
+      .trim().replace(/\/+$/, '');
+    return `${base}/v1/video-editor/llm/${provider}`;
+  }
+  return resolveLlmProviderConfig(provider, keyReader).baseUrl;
 }
 
 export function llmHeaders(req?: IncomingMessage): Record<string, string> {
+  if (platformManaged()) {
+    const session = req ? platformSession(req) : null;
+    return session ? { authorization: `Bearer ${session.token}` } : {};
+  }
   const config = resolveLlmProviderConfig(llmProviderForRequest(req), keyReader);
   if (config.provider === 'xai-oauth') {
     // OAuth requests only trust the active in-memory session. API-key accounts
@@ -91,6 +102,9 @@ export function llmProxyPlugin(): Plugin {
       server.middlewares.use('/llm', proxyMiddleware({
         target: llmTarget,
         headers: llmHeaders,
+        // The authenticated platform gateway is our own control plane. A
+        // user's provider/VPN proxy must not intercept its scoped session.
+        bypassOutboundProxy: () => platformManaged(),
         forceJsonContentType: true,
         errorMessage: llmErrorMessage,
       }));
