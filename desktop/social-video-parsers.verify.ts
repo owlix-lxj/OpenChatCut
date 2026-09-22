@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { extractSharedVideoUrl, isResolvedDesktopVideoLink, videoLinkPlatform } from '../shared/video-link-resolver.ts';
 import { parseWechatFeed, parseXhsVideo, resolveWechatVideo, resolveXhsVideo, wechatFeedRequest, xhsCanonicalUrl } from './social-video-parsers.ts';
-import { copyDownloadArgs } from './video-copy-download.ts';
+import { copyDownloadArgs, decodeWechatMediaPrefix } from './video-copy-download.ts';
+import { wechatKeyStream } from './wechat-media-decrypt.ts';
 
 assert.equal(videoLinkPlatform('https://xhslink.cn/o/example'), 'xiaohongshu');
 assert.equal(videoLinkPlatform('https://xhslink.com/example'), 'xiaohongshu');
@@ -30,6 +34,10 @@ const parsed = await resolveXhsVideo('https://xhslink.cn/o/example', async (url,
 });
 assert.equal(parsed.name, '目标视频');
 assert.deepEqual(visited, ['https://xhslink.cn/o/example', target]);
+const followedResponse = new Response(html);
+Object.defineProperty(followedResponse, 'url', { value: target });
+const followed = await resolveXhsVideo('https://xhslink.cn/o/example', async () => followedResponse);
+assert.equal(followed.name, '目标视频', 'system-proxy redirect following uses the validated final XHS URL');
 assert.deepEqual(wechatFeedRequest('https://weixin.qq.com/sph/AffHs8CkT0').body, { baseReq: { generalToken: '' }, shortUri: 'AffHs8CkT0' });
 assert.equal(parseWechatFeed('{"errCode":0,"data":{"feedInfo":{"description":"只有标题","coverUrl":"https://example.com/cover.jpg"}}}', 'https://weixin.qq.com/'), null);
 assert.equal(parseWechatFeed('{"errCode":0,"data":{"feedInfo":{"videoUrl":"https://finder.video.qq.com/a","decodeKey":18446744073709551615}}}', 'https://weixin.qq.com/')?.decodeKey, '18446744073709551615');
@@ -47,4 +55,18 @@ const args = copyDownloadArgs('https://example.com/watch?v=1', '/tmp/test');
 assert.ok(args.includes('bestaudio/best'), 'ASR must not select silent video-only DASH formats');
 assert.ok(args.includes('--ignore-config'), 'external user config must not trigger commands');
 assert.ok(args.includes('--no-plugin-dirs'));
+
+const decryptRoot = await mkdtemp(join(tmpdir(), 'aicut-wechat-decrypt-'));
+try {
+  const mediaPath = join(decryptRoot, 'media.mp4');
+  const plain = Buffer.from('wechat encrypted media prefix regression');
+  const key = wechatKeyStream('123456789');
+  const encrypted = Buffer.from(plain);
+  for (let index = 0; index < encrypted.length; index += 1) encrypted[index] ^= key[index]!;
+  await writeFile(mediaPath, encrypted);
+  await decodeWechatMediaPrefix(mediaPath, '123456789', encrypted.length);
+  assert.deepEqual(await readFile(mediaPath), plain, 'downloaded WeChat media is locally decrypted before ffprobe');
+} finally {
+  await rm(decryptRoot, { recursive: true, force: true });
+}
 console.log('social-video-parsers: platform routing, signed short links, target media, no-login failure and local IPC paths passed');

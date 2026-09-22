@@ -3,6 +3,17 @@ import type { ExternalEditSessionTerminalStatus } from './external-edit-session'
 import type { BrowserProjectOwnership } from '../persist/projectStoreTransport';
 
 const EDITOR_REGISTRATION_CAPABILITY_HEADER = 'X-OpenChatCut-Editor-Registration';
+let platformLoginRecoveryStarted = false;
+
+async function recoverExpiredDesktopSession(status: number): Promise<never | void> {
+  const login = window.openChatCutDesktop?.platformLogin;
+  if ((status !== 401 && status !== 403) || typeof login !== 'function') return;
+  if (!platformLoginRecoveryStarted) {
+    platformLoginRecoveryStarted = true;
+    await login().catch(() => { platformLoginRecoveryStarted = false; });
+  }
+  throw new Error('登录状态已过期，已在浏览器中打开登录授权。完成后应用会自动恢复。');
+}
 
 export class EditorBridgeRequestError extends Error {
   readonly operation: string;
@@ -94,7 +105,10 @@ export async function registerEditorBridge(
     }),
     signal,
   });
-  if (!response.ok) throw new EditorBridgeRequestError('registration', response.status);
+  if (!response.ok) {
+    await recoverExpiredDesktopSession(response.status);
+    throw new EditorBridgeRequestError('registration', response.status);
+  }
   const value: unknown = await response.json();
   if (!value || typeof value !== 'object') throw new Error('invalid editor registration response');
   const registration = value as Partial<{

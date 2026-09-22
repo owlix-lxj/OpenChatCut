@@ -164,6 +164,12 @@ button, input, select { font: inherit; }
   app-region:drag;
   user-select:none;
 }
+.cc-window-titlebar--win {
+  padding-right:142px !important;
+  position:relative;
+  app-region:drag;
+  user-select:none;
+}
 .cc-window-controls {
   position:absolute; left:12px; top:50%; z-index:2;
   display:flex; align-items:center; gap:8px; height:12px;
@@ -195,10 +201,35 @@ button, input, select { font: inherit; }
 .cc-window-control--maximize .cc-window-control-glyph::after { transform:translate(-50%, -50%) rotate(90deg); }
 .cc-window-controls:hover .cc-window-control-glyph { opacity:1; }
 .cc-window-control:focus-visible { outline:1.5px solid var(--cc-text); outline-offset:2px; }
+.cc-window-controls--win {
+  left:auto; right:0; top:0; height:100%; gap:0;
+  transform:none;
+}
+.cc-window-controls--win .cc-window-control {
+  width:46px; height:100%; min-width:46px; flex-basis:46px;
+  border:0; border-radius:0; background:transparent; color:var(--cc-text-dim);
+  box-shadow:none; transition:background 120ms ease, color 120ms ease;
+}
+.cc-window-controls--win .cc-window-control:hover {
+  background:var(--cc-hover); color:var(--cc-text-strong);
+}
+.cc-window-controls--win .cc-window-control--close:hover {
+  background:var(--cc-danger); color:#fff;
+}
+.cc-window-controls--win .cc-window-control-glyph {
+  width:auto; height:auto; color:currentColor; font-size:16px; line-height:1;
+  opacity:1;
+}
+.cc-window-controls--win .cc-window-control-glyph::before,
+.cc-window-controls--win .cc-window-control-glyph::after { display:none; }
 .cc-window-titlebar--mac button,
 .cc-window-titlebar--mac input,
 .cc-window-titlebar--mac select,
-.cc-window-titlebar--mac [data-cc-titlebar-control="true"] {
+.cc-window-titlebar--mac [data-cc-titlebar-control="true"],
+.cc-window-titlebar--win button,
+.cc-window-titlebar--win input,
+.cc-window-titlebar--win select,
+.cc-window-titlebar--win [data-cc-titlebar-control="true"] {
   app-region:no-drag;
 }
 

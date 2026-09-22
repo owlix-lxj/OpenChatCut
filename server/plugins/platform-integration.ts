@@ -274,9 +274,11 @@ async function digitalHumans(req: IncomingMessage, res: ServerResponse): Promise
     res.setHeader('Cache-Control', 'no-store');
     res.end(Buffer.from(await response.arrayBuffer()));
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`[platform] digital human request failed: ${detail}`);
     sendJson(res, 502, {
       error: 'digital human request failed',
-      detail: error instanceof Error ? error.message : String(error),
+      detail,
     });
   }
 }

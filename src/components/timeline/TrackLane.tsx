@@ -363,7 +363,10 @@ export function TrackLane({
               background: CLIP_COLOR[it.kind] ?? theme.clipMg,
               // The video thumbnail frame bar is drawn by ClipMediaLayers (CSS background cannot load mp4); the image still uses itself as the background
               backgroundImage: it.kind === 'image' && it.src ? `linear-gradient(90deg, transparent 0%, rgba(0,0,0,.4) 78%), url(${it.src})` : undefined,
-              backgroundSize: 'auto 100%', backgroundRepeat: 'no-repeat',
+              // A still image remains valid for its entire authored duration. Repeat its
+              // thumbnail along the clip instead of exposing the blue fallback after one tile.
+              backgroundSize: it.kind === 'image' ? '100% 100%, auto 100%' : 'auto 100%',
+              backgroundRepeat: it.kind === 'image' ? 'no-repeat, repeat-x' : 'no-repeat',
               borderRadius: 3, color: '#fff', fontSize: 11,
               display: 'flex', alignItems: 'flex-end', padding: '0 8px 5px', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap',
               transform: dragging && dragOffsetY ? `translate3d(0, ${dragOffsetY}px, 0)` : undefined,

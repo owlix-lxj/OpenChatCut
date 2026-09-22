@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findBundledBrowser } from './packaged-runtime.ts';
 
-const TIMEOUT_MS = 75_000;
+const configuredTimeout = Number.parseInt(process.env.CC_VIDEO_RESOLVER_TIMEOUT_MS ?? '', 10);
+const TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout >= 10_000
+  ? configuredTimeout : 75_000;
+const PROCESS_EXIT_TIMEOUT_MS = 5_000;
+const PROFILE_REMOVE_ATTEMPTS = 8;
+const DESKTOP_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+  + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 interface CdpMessage {
   readonly id?: number;
@@ -34,7 +40,7 @@ function browserExecutable(): string {
   throw new Error('bundled Chrome resolver is unavailable');
 }
 
-function videoCandidate(value: string): boolean {
+export function videoCandidate(value: string): boolean {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
@@ -52,6 +58,85 @@ function targetCandidate(value: string, videoId: string): boolean {
     return url.searchParams.get('__vid') === videoId || url.searchParams.get('video_id') === videoId;
   } catch {
     return false;
+  }
+}
+
+export function selectVideoCandidate(candidates: readonly string[], videoId: string): string | undefined {
+  return videoId
+    ? candidates.findLast((candidate) => targetCandidate(candidate, videoId)) ?? candidates.at(-1)
+    : candidates.at(-1);
+}
+
+export function trustedMediaResponse(value: string, mimeType: unknown): boolean {
+  if (typeof mimeType !== 'string' || !/^(?:video\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl))/i.test(mimeType)) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.hostname.toLowerCase().endsWith('douyinstatic.com');
+  } catch {
+    return false;
+  }
+}
+
+export interface BrowserResolverCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly domain: string;
+  readonly path?: string;
+  readonly secure?: boolean;
+  readonly httpOnly?: boolean;
+  readonly expirationDate?: number;
+}
+
+export interface BrowserVideoResolution {
+  readonly url: string | null;
+  readonly title: string;
+  readonly cookies: readonly BrowserResolverCookie[];
+}
+
+function waitForProcessExit(child: ReturnType<typeof spawn>, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited: boolean): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off('exit', onExit);
+      resolve(exited);
+    };
+    const onExit = (): void => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    child.once('exit', onExit);
+  });
+}
+
+/** Chrome keeps chrome_debug.log open briefly on Windows. Wait for the process instead of letting
+ * profile cleanup race it and replace a successfully captured media URL with EBUSY. */
+export async function stopBrowserProcess(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill();
+  if (await waitForProcessExit(child, PROCESS_EXIT_TIMEOUT_MS)) return;
+  child.kill('SIGKILL');
+  await waitForProcessExit(child, PROCESS_EXIT_TIMEOUT_MS);
+}
+
+export async function removeBrowserProfile(profile: string): Promise<void> {
+  for (let attempt = 1; attempt <= PROFILE_REMOVE_ATTEMPTS; attempt += 1) {
+    try {
+      await rm(profile, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY';
+      if (!retryable || attempt === PROFILE_REMOVE_ATTEMPTS) {
+        console.warn('[video-resolver] unable to remove temporary Chrome profile:',
+          error instanceof Error ? error.message : String(error));
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 125));
+    }
   }
 }
 
@@ -73,6 +158,7 @@ async function connectCdp(url: string): Promise<{
   evaluate: () => Promise<PageSnapshot>;
   reload: () => Promise<void>;
   candidates: () => readonly string[];
+  cookies: () => Promise<readonly BrowserResolverCookie[]>;
   close: () => void;
 }> {
   const socket = new WebSocket(url);
@@ -93,11 +179,14 @@ async function connectCdp(url: string): Promise<{
       if (!message.id) {
         if (message.method === 'Network.requestWillBeSent') {
           const request = message.params?.request as { url?: unknown } | undefined;
-          if (typeof request?.url === 'string' && videoCandidate(request.url)
+          const resourceType = message.params?.type;
+          if (typeof request?.url === 'string'
+            && (videoCandidate(request.url) || (resourceType === 'Media' && request.url.startsWith('https://')))
             && !networkCandidates.includes(request.url)) networkCandidates.push(request.url);
         } else if (message.method === 'Network.responseReceived') {
-          const response = message.params?.response as { url?: unknown } | undefined;
-          if (typeof response?.url === 'string' && videoCandidate(response.url)
+          const response = message.params?.response as { url?: unknown; mimeType?: unknown } | undefined;
+          if (typeof response?.url === 'string'
+            && (videoCandidate(response.url) || trustedMediaResponse(response.url, response.mimeType))
             && !networkCandidates.includes(response.url)) networkCandidates.push(response.url);
         }
         return;
@@ -141,18 +230,41 @@ async function connectCdp(url: string): Promise<{
     },
     reload: async () => { await command('Page.reload', { ignoreCache: true }); },
     candidates: () => networkCandidates,
+    cookies: async () => {
+      const response = await command('Network.getAllCookies') as { cookies?: Array<{
+        name?: unknown; value?: unknown; domain?: unknown; path?: unknown;
+        secure?: unknown; httpOnly?: unknown; expires?: unknown;
+      }> };
+      return (response.cookies ?? []).flatMap((cookie): BrowserResolverCookie[] => {
+        if (typeof cookie.name !== 'string' || typeof cookie.value !== 'string'
+          || typeof cookie.domain !== 'string') return [];
+        return [{
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: typeof cookie.path === 'string' ? cookie.path : '/',
+          secure: cookie.secure === true,
+          httpOnly: cookie.httpOnly === true,
+          expirationDate: typeof cookie.expires === 'number' && cookie.expires > 0
+            ? cookie.expires : undefined,
+        }];
+      });
+    },
     close: () => socket.close(),
   };
 }
 
 /** Resolve a current Douyin post with the Chrome already bundled for local rendering. */
 export async function resolveWithBundledChrome(canonicalUrl: string, videoId = ''): Promise<{
-  url: string;
+  url: string | null;
   title: string;
+  cookies: readonly BrowserResolverCookie[];
 }> {
   const profile = await mkdtemp(join(tmpdir(), 'aicut-chrome-resolver-'));
   const child = spawn(browserExecutable(), [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    `--user-agent=${DESKTOP_BROWSER_UA}`, '--lang=zh-CN', '--window-size=1365,768',
+    '--disable-blink-features=AutomationControlled',
     '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding', '--disable-features=CalculateNativeWinOcclusion',
     '--autoplay-policy=no-user-gesture-required', '--remote-debugging-port=0',
@@ -176,30 +288,35 @@ export async function resolveWithBundledChrome(canonicalUrl: string, videoId = '
     cdp = await connectCdp(await pageWebSocket(ws));
     const startedAt = Date.now();
     let reloaded = false;
+    let lastTitle = '';
     for (;;) {
       const page: PageSnapshot = await cdp.evaluate().catch(() => ({}));
+      if (page.title) lastTitle = page.title;
       const candidates = [
         ...cdp.candidates(),
         ...(page.sources ?? []),
         ...(page.resources ?? []),
       ].filter(videoCandidate);
-      const source = videoId
-        ? candidates.findLast((candidate) => targetCandidate(candidate, videoId))
-        : candidates.at(-1);
-      if (source) return { url: source, title: page.title ?? '' };
+      // Current Douyin CDN URLs do not consistently retain __vid/video_id. Prefer the exact
+      // marker when present, then use the latest trusted media request from this canonical,
+      // single-video page instead of discarding a valid stream solely due to that URL change.
+      const source = selectVideoCandidate(candidates, videoId);
+      if (source) return { url: source, title: page.title ?? lastTitle, cookies: [] };
       if (!reloaded && Date.now() - startedAt >= 20_000) {
         reloaded = true;
         await cdp.reload().catch(() => undefined);
       }
       if (Date.now() - startedAt >= TIMEOUT_MS) {
-        throw new Error(`bundled Chrome captured no target stream: ${stderr.slice(-500)}`);
+        const cookies = await cdp.cookies().catch(() => []);
+        console.warn(`[video-resolver] bundled Chrome captured no target stream; forwarding ${cookies.length} fresh cookies to fallback: ${stderr.slice(-500)}`);
+        return { url: null, title: lastTitle, cookies };
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   } finally {
     clearTimeout(timeout);
     cdp?.close();
-    child.kill();
-    await rm(profile, { recursive: true, force: true });
+    await stopBrowserProcess(child);
+    await removeBrowserProfile(profile);
   }
 }

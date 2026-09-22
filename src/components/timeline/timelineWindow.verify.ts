@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { TimelineItem, TimelineState, TransitionItem } from '../../editor/types';
-import { clipMediaGeometry } from './clipMediaGeometry';
+import { clipMediaGeometry, clipMediaHoldGeometry } from './clipMediaGeometry';
 import {
   MAX_RULER_TICKS,
   buildTimelineIndexes,
@@ -44,6 +44,21 @@ const state: TimelineState = {
   assert.deepEqual(window, { startFrame: 294, endFrame: 994 });
   assert.deepEqual(intersectFrameRange(280, 40, window), { startFrame: 294, endFrame: 320 });
   assert.equal(intersectFrameRange(0, 20, window), null);
+}
+
+{
+  const hold = clipMediaHoldGeometry({
+    clipStartFrame: 100,
+    durationInFrames: 180,
+    srcInFrame: 30,
+    playbackRate: 1.5,
+    sourceDurationFrames: 180,
+    px: 2,
+    visibleWindow: { startFrame: 0, endFrame: 500 },
+  });
+  assert.ok(hold);
+  assert.equal(hold.leftPx, 200, 'tail hold starts after the playable 100 timeline frames');
+  assert.equal(hold.widthPx, 160, 'tail hold fills the entire overrun instead of showing fallback color');
 }
 
 {

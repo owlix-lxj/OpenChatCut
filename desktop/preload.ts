@@ -95,6 +95,8 @@ export interface OpenChatCutDesktopApi {
   platform: NodeJS.Platform;
   /** Open the platform login page in the system browser (openchatcut:// callback completes login). */
   platformLogin(): Promise<void>;
+  /** Invalidate the active browser-login challenge. */
+  cancelPlatformLogin(): Promise<{ status: 'cancelled'; invalidated: boolean }>;
   resolveVideoLink(value: string): Promise<ResolvedDesktopVideoLink>;
   selectDirectory(defaultPath?: string): Promise<string | null>;
   selectExportDirectory(): Promise<DesktopExportDirectoryGrant | null>;
@@ -158,6 +160,9 @@ const api: OpenChatCutDesktopApi = {
   },
   getPathForFile: (file) => webUtils.getPathForFile(file) || undefined,
   platformLogin: () => ipcRenderer.invoke('openchatcut:platform-login') as Promise<void>,
+  cancelPlatformLogin: () => ipcRenderer.invoke('openchatcut:platform-login-cancel') as Promise<{
+    status: 'cancelled'; invalidated: boolean;
+  }>,
   resolveVideoLink: async (value) => {
     const result: unknown = await ipcRenderer.invoke(VIDEO_LINK_RESOLVER_CHANNEL, value);
     if (!isResolvedDesktopVideoLink(result)) throw new Error('桌面端返回了无效的视频地址');

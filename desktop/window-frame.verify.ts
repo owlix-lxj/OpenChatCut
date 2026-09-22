@@ -11,7 +11,7 @@ if (existsSync(moduleUrl)) {
     { titleBarStyle: 'hiddenInset' },
     'macOS reserves an inset titlebar region for renderer controls',
   );
-  assert.deepEqual(desktopWindowFrameOptions('win32'), {}, 'Windows keeps its native frame');
+  assert.deepEqual(desktopWindowFrameOptions('win32'), { frame: false }, 'Windows uses the themed renderer titlebar');
   assert.deepEqual(desktopWindowFrameOptions('linux'), {}, 'Linux keeps its native frame');
 
   const visibilityCalls: boolean[] = [];

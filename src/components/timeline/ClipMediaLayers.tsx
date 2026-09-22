@@ -1,7 +1,7 @@
 import type { TimelineItem } from '../../editor/types';
 import { filmstripBackground, peaksPath, useClipPreview } from '../../media/clipPreview';
 import type { TimelineFrameWindow } from './timelineUtil';
-import { clipMediaGeometry, type ClipMediaGeometry } from './clipMediaGeometry';
+import { clipMediaGeometry, clipMediaHoldGeometry, type ClipMediaGeometry } from './clipMediaGeometry';
 
 // Media preview layer within the clip: The video track displays thumbnail frame bars and the sound waves of the clip's own audio track.
 // Data comes from /api/waveform, /api/filmstrip (see src/media/clipPreview.ts); geometry button
@@ -30,6 +30,28 @@ function FilmstripLayer({ geometry, hasWave, strip }: {
         zIndex: 0, pointerEvents: 'none', overflow: 'hidden', opacity: 0.92,
         backgroundRepeat: 'no-repeat',
         ...strip,
+      }}
+    />
+  );
+}
+
+function HeldVideoFrameLayer({ geometry, hasWave, src, durationSeconds }: {
+  geometry: ClipMediaGeometry;
+  hasWave: boolean;
+  src: string;
+  durationSeconds: number;
+}) {
+  const query = new URLSearchParams({ src, time: String(Math.max(0, durationSeconds - 0.001)) });
+  return (
+    <div
+      aria-hidden
+      title="尾帧定格"
+      style={{
+        position: 'absolute', left: geometry.leftPx, width: geometry.widthPx, top: 0,
+        height: hasWave ? `${STRIP_RATIO * 100}%` : '100%',
+        zIndex: 0, pointerEvents: 'none', overflow: 'hidden', opacity: 0.92,
+        backgroundImage: `url(/api/media-frame?${query})`,
+        backgroundSize: 'auto 100%', backgroundPosition: 'left center', backgroundRepeat: 'repeat-x',
       }}
     />
   );
@@ -79,10 +101,17 @@ export function ClipMediaLayers({ item, px, fps, height, clipStartFrame, duratio
   if (!preview || !geometry || height <= 0) return null;
 
   const isVideo = item.kind === 'video';
+  const sourceDurationFrames = (preview.durationMs / 1000) * fps;
   const strip = isVideo ? filmstripBackground(preview, {
     px, fps, srcInFrame: geometry.srcInFrame, playbackRate,
   }) : null;
   const hasWave = preview.peaks.length > 0;
+  const holdGeometry = isVideo && item.src && sourceDurationFrames > 0
+    ? clipMediaHoldGeometry({
+        clipStartFrame, durationInFrames, srcInFrame, playbackRate,
+        sourceDurationFrames, px, visibleWindow,
+      })
+    : null;
   const waveH = strip && hasWave ? Math.max(6, height * (1 - STRIP_RATIO)) : height;
   const d = hasWave
     ? peaksPath(preview, {
@@ -94,6 +123,10 @@ export function ClipMediaLayers({ item, px, fps, height, clipStartFrame, duratio
   return (
     <>
       {strip && <FilmstripLayer geometry={geometry} hasWave={hasWave} strip={strip} />}
+      {holdGeometry && item.src && <HeldVideoFrameLayer
+        geometry={holdGeometry} hasWave={hasWave} src={item.src}
+        durationSeconds={preview.durationMs / 1000}
+      />}
       {d && <WaveLayer geometry={geometry} height={waveH} path={d} strip={!!strip} video={isVideo} />}
     </>
   );

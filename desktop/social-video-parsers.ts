@@ -57,7 +57,10 @@ export async function resolveXhsVideo(link: string, fetcher: ShareFetch): Promis
       continue;
     }
     if (!response.ok) { await response.body?.cancel(); throw new Error(`小红书访问失败（HTTP ${response.status}），请检查分享链接`); }
-    return parseXhsVideo(await limitedText(response), pageUrl);
+    // Electron session.fetch follows redirects through the operating system's proxy. Validate its
+    // final URL just as strictly as each manual hop before using it to identify the target note.
+    const resolvedPageUrl = response.url ? xhsCanonicalUrl(response.url) : pageUrl;
+    return parseXhsVideo(await limitedText(response), resolvedPageUrl);
   }
   throw new Error('小红书短链跳转次数过多，请重新复制分享链接');
 }

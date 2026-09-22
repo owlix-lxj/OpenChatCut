@@ -39,6 +39,13 @@ export async function startPlatformLogin(open: (url: string) => Promise<void>): 
   await open(url.toString());
 }
 
+/** Cancel the active browser-login challenge. Any later callback from that browser tab is rejected. */
+export function cancelPlatformLogin(): boolean {
+  const hadPendingLogin = pendingState !== null;
+  pendingState = null;
+  return hadPendingLogin;
+}
+
 /**
  * Validate an incoming deep link and extract the launch ticket. Returns null for anything that is
  * not a well-formed openchatcut://auth callback whose state matches the pending login. The state is

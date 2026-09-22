@@ -1,7 +1,7 @@
 import './chdir-first.ts';
 import { installSocialPublish } from './geo-social-publish.ts';
 import { existsSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   app,
@@ -33,7 +33,7 @@ import { installDesktopInferenceIpc } from './native-inference-ipc.ts';
 import { detectDesktopHardwareProfile } from './native-hardware-profile.ts';
 import { installDirectoryWatchIpc } from './directory-watch-ipc.ts';
 import {
-  consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, PLATFORM_LOGIN_PROTOCOL,
+  cancelPlatformLogin, consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, PLATFORM_LOGIN_PROTOCOL,
   startPlatformLogin,
 } from './platform-login.ts';
 import {
@@ -87,6 +87,7 @@ import {
   persistDesktopPlatformSession,
   restoreDesktopPlatformSession,
 } from './platform-session-store.ts';
+import { decodePlatformSessionClaims } from '../server/platform-session.ts';
 import {
   applyWindowsGpuCrashFallback,
   installWindowsGpuCrashRecovery,
@@ -113,14 +114,42 @@ let mainWindow: BrowserWindow | null = null;
 let currentOrigin: string | null = null;
 let pendingDeepLink: string | null = null;
 let platformSessionToken: string | null = null;
+let platformSessionExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 
 function platformSessionFile(): string {
   return desktopPlatformSessionPath(app.getPath('userData'));
 }
 
 async function clearPersistedPlatformSession(): Promise<void> {
+  if (platformSessionExpiryTimer) clearTimeout(platformSessionExpiryTimer);
+  platformSessionExpiryTimer = null;
   platformSessionToken = null;
   await clearDesktopPlatformSessionFile(platformSessionFile());
+}
+
+function armPlatformSessionExpiry(token: string): void {
+  if (platformSessionExpiryTimer) clearTimeout(platformSessionExpiryTimer);
+  platformSessionExpiryTimer = null;
+  const claims = decodePlatformSessionClaims(token, 'session');
+  if (!claims) return;
+  const expire = (): void => {
+    const remaining = claims.exp * 1_000 - Date.now();
+    if (remaining > 0) {
+      platformSessionExpiryTimer = setTimeout(expire, Math.min(remaining, 2_147_000_000));
+      return;
+    }
+    void clearPersistedPlatformSession().finally(() => {
+      const win = mainWindow;
+      const origin = currentOrigin;
+      if (win && origin && !win.isDestroyed()) void win.loadURL(`${origin}/`);
+    });
+  };
+  expire();
+}
+
+function usePlatformSession(token: string | null): void {
+  platformSessionToken = token;
+  if (token) armPlatformSessionExpiry(token);
 }
 
 /** Handle an openchatcut:// deep link: on a valid login callback, exchange the launch ticket at
@@ -133,7 +162,7 @@ function handlePlatformDeepLink(rawUrl: string): void {
   const win = mainWindow;
   const origin = currentOrigin;
   void exchangeDesktopSession(result.ticket).then(async (session) => {
-    platformSessionToken = session.token;
+    usePlatformSession(session.token);
     try {
       await persistDesktopPlatformSession(platformSessionFile(), session.token, safeStorage);
     } catch (error) {
@@ -154,7 +183,11 @@ app.on('open-url', (event, url) => {
   event.preventDefault();
   handlePlatformDeepLink(url);
 });
-app.setAsDefaultProtocolClient(PLATFORM_LOGIN_PROTOCOL);
+if (process.defaultApp && process.argv[1]) {
+  app.setAsDefaultProtocolClient(PLATFORM_LOGIN_PROTOCOL, process.execPath, [resolve(process.argv[1])]);
+} else {
+  app.setAsDefaultProtocolClient(PLATFORM_LOGIN_PROTOCOL);
+}
 
 type DesktopIpcHandler = Parameters<typeof ipcMain.handle>[1];
 
@@ -212,6 +245,10 @@ function registerDesktopHandlers(trustedOrigin: string): void {
   ipcMain.handle('openchatcut:platform-login', trustedDesktopHandler(trustedOrigin, async () => {
     await startPlatformLogin(shell.openExternal);
   }));
+  ipcMain.handle('openchatcut:platform-login-cancel', trustedDesktopHandler(trustedOrigin, async () => ({
+    status: 'cancelled' as const,
+    invalidated: cancelPlatformLogin(),
+  })));
   ipcMain.handle(VIDEO_LINK_RESOLVER_CHANNEL, trustedDesktopHandler(trustedOrigin, async (_event, value: unknown) => {
     if (typeof value !== 'string' || value.length > 4_000) throw new Error('无效的视频分享内容');
     return resolveDesktopVideoLink(value);
@@ -409,10 +446,10 @@ async function boot(): Promise<void> {
     app.dock.setIcon(APP_ICON_PATH);
   }
   try {
-    platformSessionToken = await restoreDesktopPlatformSession(
+    usePlatformSession(await restoreDesktopPlatformSession(
       platformSessionFile(),
       safeStorage,
-    );
+    ));
     if (platformSessionToken) console.log('[desktop] restored encrypted platform session');
   } catch (error) {
     console.warn('[desktop] encrypted platform session restore failed:',

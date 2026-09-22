@@ -64,6 +64,8 @@ declare global {
       socialPublish: SocialPublishApi;
       getPathForFile(file: File): string | undefined;
       platform: NodeJS.Platform;
+      platformLogin(): Promise<void>;
+      cancelPlatformLogin(): Promise<{ status: 'cancelled'; invalidated: boolean }>;
       resolveVideoLink(value: string): Promise<ResolvedDesktopVideoLink>;
       selectDirectory(defaultPath?: string): Promise<string | null>;
       selectExportDirectory(): Promise<DesktopExportDirectoryGrant | null>;

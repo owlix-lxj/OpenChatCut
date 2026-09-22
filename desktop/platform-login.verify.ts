@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, platformApiBaseUrl, platformLoginUrl,
+  cancelPlatformLogin, consumeLoginCallback, deepLinkFromArgv, exchangeDesktopSession, platformApiBaseUrl, platformLoginUrl,
   startPlatformLogin,
 } from './platform-login.ts';
 
@@ -29,6 +29,17 @@ assert.equal(consumeLoginCallback('openchatcut://other?token=x&state=' + s2), nu
 assert.equal(consumeLoginCallback('openchatcut://auth?state=' + s2), null, 'missing token rejected');
 // the valid one still works after the rejections above (state not consumed by failures)
 assert.deepEqual(consumeLoginCallback('openchatcut://auth?token=good&state=' + s2), { ticket: 'good' });
+
+// ── cancellation invalidates the pending browser callback ──
+await startPlatformLogin(async (url) => { opened = url; });
+const cancelledState = new URL(opened).searchParams.get('state')!;
+assert.equal(cancelPlatformLogin(), true, 'pending challenge is cancelled');
+assert.equal(cancelPlatformLogin(), false, 'cancelling again reports no pending challenge');
+assert.equal(
+  consumeLoginCallback(`openchatcut://auth?token=late&state=${cancelledState}`),
+  null,
+  'callback from a cancelled browser tab is rejected',
+);
 
 // ── argv deep-link extraction (Windows/Linux) ──
 assert.equal(deepLinkFromArgv(['electron', '.', 'openchatcut://auth?token=z']), 'openchatcut://auth?token=z');

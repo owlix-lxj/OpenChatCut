@@ -10,11 +10,11 @@ import { useDashboardModel, type DashboardProps } from './dashboard/useDashboard
 
 export function Dashboard(props: DashboardProps) {
   const model = useDashboardModel(props);
-  const isMacDesktop = window.openChatCutDesktop?.platform === 'darwin';
+  const desktopPlatform = window.openChatCutDesktop?.platform;
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: theme.bg, color: theme.text, fontFamily: 'Geist, system-ui, -apple-system, sans-serif' }}>
       <UpstreamUpdateNotice />
-      <header className={`cc-window-titlebar${isMacDesktop ? ' cc-window-titlebar--mac' : ''}`} style={{ position: 'relative', height: 48, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '0 24px', borderBottom: `0.5px solid ${theme.border}`, background: theme.panel }}>
+      <header className={`cc-window-titlebar${desktopPlatform === 'darwin' ? ' cc-window-titlebar--mac' : desktopPlatform === 'win32' ? ' cc-window-titlebar--win' : ''}`} style={{ position: 'relative', height: 48, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10, padding: '0 24px', borderBottom: `0.5px solid ${theme.border}`, background: theme.panel }}>
         <DesktopWindowControls />
         <DashboardTitlebarContent model={model} />
       </header>

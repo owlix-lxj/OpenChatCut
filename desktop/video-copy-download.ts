@@ -65,6 +65,7 @@ export async function downloadVideoForCopy(url: string, options: {
     const source = join(temporary, files[0]!);
     const info = await stat(source);
     if (info.size === 0 || info.size > 500 * 1024 * 1024) throw new Error('媒体为空或超过 500 MB 限制');
+    if (options.decodeKey && !options.direct) await decodeWechatMediaPrefix(source, options.decodeKey, info.size);
     const probe = JSON.parse(await runCopyTool(ffprobeBin(), [
       '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=codec_name', '-of', 'json', source,
     ], 20_000)) as { streams?: { codec_name?: string }[] };
@@ -76,6 +77,20 @@ export async function downloadVideoForCopy(url: string, options: {
     return { path: `/media/uploads/${storedName}`, name: String(title).slice(0, 200) };
   } finally {
     await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export async function decodeWechatMediaPrefix(path: string, decimalKey: string, fileSize: number): Promise<void> {
+  const key = wechatKeyStream(decimalKey);
+  const length = Math.min(key.length, fileSize);
+  const content = Buffer.alloc(length);
+  const file = await open(path, 'r+');
+  try {
+    const { bytesRead } = await file.read(content, 0, length, 0);
+    for (let index = 0; index < bytesRead; index += 1) content[index] ^= key[index]!;
+    await file.write(content, 0, bytesRead, 0);
+  } finally {
+    await file.close();
   }
 }
 

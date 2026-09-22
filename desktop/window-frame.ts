@@ -1,6 +1,6 @@
 import type { BrowserWindowConstructorOptions } from 'electron';
 
-type DesktopWindowFrameOptions = Pick<BrowserWindowConstructorOptions, 'titleBarStyle'>;
+type DesktopWindowFrameOptions = Pick<BrowserWindowConstructorOptions, 'frame' | 'titleBarStyle'>;
 
 interface WindowButtonVisibilityHost {
   setWindowButtonVisibility(visible: boolean): void;
@@ -9,7 +9,9 @@ interface WindowButtonVisibilityHost {
 export function desktopWindowFrameOptions(
   platform: NodeJS.Platform = process.platform,
 ): DesktopWindowFrameOptions {
-  return platform === 'darwin' ? { titleBarStyle: 'hiddenInset' } : {};
+  if (platform === 'darwin') return { titleBarStyle: 'hiddenInset' };
+  if (platform === 'win32') return { frame: false };
+  return {};
 }
 
 export function applyDesktopWindowFrame(

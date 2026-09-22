@@ -130,6 +130,36 @@ export interface PlatformDigitalHumanMediaJob {
 	updated_at: string;
 }
 
+export function platformDigitalHumanErrorMessage(message: string): string {
+  const normalized = message.trim().toLowerCase();
+  if (normalized === 'digital human pricing is not configured') {
+    return '业务平台尚未配置数字人视频计费单价，请联系平台管理员完成定价配置后重试。';
+  }
+  if (normalized === 'digital human request failed') {
+    return '数字人业务平台请求失败，请重试；如果持续失败，请检查业务平台服务状态。';
+  }
+  if (normalized === 'fetch failed') {
+    return '无法连接数字人业务平台，请检查网络或稍后重试。';
+  }
+  if (normalized.includes('timed out') || normalized.includes('timeout')) {
+    return '数字人业务平台响应超时，请稍后重试。';
+  }
+  return message;
+}
+
+export function platformDigitalHumanResponseError(body: {
+  error?: string | { message?: string };
+  detail?: string;
+  message?: string;
+}, status: number): string {
+  const nested = typeof body.error === 'object' ? body.error?.message : body.error;
+  // Local proxy failures use a generic `error` plus the actionable cause in `detail`.
+  // Prefer that cause so “digital human request failed” never hides the real problem.
+  const message = body.detail?.trim() || nested?.trim() || body.message?.trim()
+    || `数字人请求失败（HTTP ${status}）`;
+  return platformDigitalHumanErrorMessage(message);
+}
+
 async function digitalHumanRequest<T>(path = '', init?: RequestInit, base = '/api/platform/digital-humans'): Promise<T> {
   const response = await fetch(`${base}${path}`, init);
   if (response.status === 204) return undefined as T;
@@ -139,8 +169,7 @@ async function digitalHumanRequest<T>(path = '', init?: RequestInit, base = '/ap
     message?: string;
   };
   if (!response.ok) {
-    const nested = typeof body.error === 'object' ? body.error?.message : body.error;
-    throw new Error(nested ?? body.detail ?? body.message ?? `数字人请求失败（HTTP ${response.status}）`);
+    throw new Error(platformDigitalHumanResponseError(body, response.status));
   }
   return body;
 }
